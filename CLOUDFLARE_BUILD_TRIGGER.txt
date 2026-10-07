@@ -2,3 +2,5 @@ Build trigger for Cloudflare Workers.
 2026-10-07
 
 Supabase variables configured for automatic Cloudflare build.
+
+Finalizacao automatica.
