@@ -150,31 +150,37 @@ function EmptyRow({text}){return <tr><td colSpan="9" className="empty-row">{text
 function downloadCSV(rows,name){const clean=rows.map(r=>Object.fromEntries(Object.entries(r).filter(([k,v])=>typeof v!=="object"&&k!=="id")));const keys=[...new Set(clean.flatMap(r=>Object.keys(r)))];const csv=[keys.join(";"),...clean.map(r=>keys.map(k=>String(r[k]??"").replaceAll(";"," ")).join(";"))].join("\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}));a.download=name;a.click();URL.revokeObjectURL(a.href)}
 
 function useData(user){
- const [state,setState]=useState({banks:[],categories:[],channels:[],suppliers:[],cards:[],sales:[],bankTx:[],payables:[],receivables:[],products:[],purchases:[],loading:true});
+ const [state,setState]=useState({banks:[],categories:[],channels:[],suppliers:[],cards:[],sales:[],bankTx:[],payables:[],receivables:[],products:[],purchases:[],loading:true,error:""});
  const [search,setSearch]=useState(""),[bankFilter,setBankFilter]=useState(""),[payFilter,setPayFilter]=useState("");
- async function reload(){setState(s=>({...s,loading:true}));const uid=user.id;
-  const [banks,categories,channels,suppliers,cards,sales,bankTx,payables,receivables,products,purchases]=await Promise.all([
-   supabase.from("bank_accounts").select("*").eq("user_id",uid).eq("active",true).order("name"),
-   supabase.from("categories").select("*").eq("user_id",uid).eq("active",true).order("classification").order("name"),
-   supabase.from("channels").select("*").eq("user_id",uid).eq("active",true).order("name"),
-   supabase.from("suppliers").select("*").eq("user_id",uid).eq("active",true).order("name"),
-   supabase.from("card_accounts").select("*").eq("user_id",uid).eq("active",true).order("name"),
-   supabase.from("sales").select("*,channels(name)").eq("user_id",uid).order("fact_date",{ascending:false}).limit(500),
-   supabase.from("bank_transactions").select("*,bank_accounts(name),categories(name)").eq("user_id",uid).order("fact_date",{ascending:false}).limit(500),
-   supabase.from("payables").select("*,suppliers(name),categories(name)").eq("user_id",uid).order("due_date",{ascending:true}).limit(500),
-   supabase.from("receivables").select("*").eq("user_id",uid).order("expected_date",{ascending:true}).limit(500),
-   supabase.from("products").select("*,categories(name)").eq("user_id",uid).eq("active",true).order("name"),
-   supabase.from("purchases").select("*,suppliers(name),categories(name)").eq("user_id",uid).order("fact_date",{ascending:false}).limit(500)
-  ]);
-  setState({banks:banks.data||[],categories:categories.data||[],channels:channels.data||[],suppliers:suppliers.data||[],cards:cards.data||[],sales:sales.data||[],bankTx:bankTx.data||[],payables:payables.data||[],receivables:receivables.data||[],products:products.data||[],purchases:purchases.data||[],loading:false});
+ async function reload(){
+  if(!user?.id||!supabase){setState(s=>({...s,loading:false,error:"Não foi possível acessar o Supabase."}));return}
+  setState(s=>({...s,loading:true,error:""}));
+  const uid=user.id;
+  const queries=[
+   ["bancos",()=>supabase.from("bank_accounts").select("*").eq("user_id",uid).eq("active",true).order("name")],
+   ["categorias",()=>supabase.from("categories").select("*").eq("user_id",uid).eq("active",true).order("classification").order("name")],
+   ["canais",()=>supabase.from("channels").select("*").eq("user_id",uid).eq("active",true).order("name")],
+   ["fornecedores",()=>supabase.from("suppliers").select("*").eq("user_id",uid).eq("active",true).order("name")],
+   ["cartões",()=>supabase.from("card_accounts").select("*").eq("user_id",uid).eq("active",true).order("name")],
+   ["vendas",()=>supabase.from("sales").select("*,channels(name)").eq("user_id",uid).order("fact_date",{ascending:false}).limit(500)],
+   ["movimentos bancários",()=>supabase.from("bank_transactions").select("*,bank_accounts(name),categories(name)").eq("user_id",uid).order("fact_date",{ascending:false}).limit(500)],
+   ["contas a pagar",()=>supabase.from("payables").select("*,suppliers(name),categories(name)").eq("user_id",uid).order("due_date",{ascending:true}).limit(500)],
+   ["recebimentos",()=>supabase.from("receivables").select("*").eq("user_id",uid).order("expected_date",{ascending:true}).limit(500)],
+   ["produtos",()=>supabase.from("products").select("*,categories(name)").eq("user_id",uid).eq("active",true).order("name")],
+   ["compras",()=>supabase.from("purchases").select("*,suppliers(name),categories(name)").eq("user_id",uid).order("fact_date",{ascending:false}).limit(500)]
+  ];
+  try{
+   const results=await Promise.all(queries.map(async([name,fn])=>{try{return [name,await fn()]}catch(error){return [name,{data:[],error}]} }));
+   const failed=results.filter(([,r])=>r?.error);
+   if(failed.length)console.warn("Consultas com erro:",failed.map(([name,r])=>({name,error:r.error?.message||String(r.error)})));
+   const get=name=>results.find(([n])=>n===name)?.[1]?.data||[];
+   setState({banks:get("bancos"),categories:get("categorias"),channels:get("canais"),suppliers:get("fornecedores"),cards:get("cartões"),sales:get("vendas"),bankTx:get("movimentos bancários"),payables:get("contas a pagar"),receivables:get("recebimentos"),products:get("produtos"),purchases:get("compras"),loading:false,error:failed.length?"Alguns dados não puderam ser carregados ("+failed.length+" consulta(s)).":""});
+  }catch(error){console.error("Erro ao carregar dados:",error);setState(s=>({...s,loading:false,error:error?.message||"Erro ao carregar seus dados."}))}
  }
- useEffect(()=>{reload()},[user.id]);
+ useEffect(()=>{reload()},[user?.id]);
  const filterText=x=>!search||JSON.stringify(x).toLowerCase().includes(search.toLowerCase());
- return {...state,reload,search,setSearch,bankFilter,setBankFilter,payFilter,setPayFilter,
-  sales:state.sales.filter(filterText),bankTx:state.bankTx.filter(x=>(!bankFilter||x.bank_account_id===bankFilter)&&filterText(x)),
-  payables:state.payables.filter(x=>(!payFilter||x.status===payFilter)&&filterText(x))};
+ return {...state,reload,search,setSearch,bankFilter,setBankFilter,payFilter,setPayFilter,sales:state.sales.filter(filterText),bankTx:state.bankTx.filter(x=>(!bankFilter||x.bank_account_id===bankFilter)&&filterText(x)),payables:state.payables.filter(x=>(!payFilter||x.status===payFilter)&&filterText(x))};
 }
-
 export default function App(){
  const [user,setUser]=useState(null),[active,setActive]=useState("dashboard"),[mobile,setMobile]=useState(false),data=useData(user||{id:""});
  useEffect(()=>{if(!supabase)return;supabase.auth.getSession().then(async({data})=>{if(data.session?.user){await seedUser(data.session.user);setUser(data.session.user)}});const {data:{subscription}}=supabase.auth.onAuthStateChange(async(_e,s)=>{setUser(s?.user??null);if(s?.user)await seedUser(s.user)});return()=>subscription.unsubscribe()},[]);
