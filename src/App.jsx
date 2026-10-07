@@ -137,8 +137,58 @@ function Conciliacao({data}){
 
 function Dados({data}){
  const [preview,setPreview]=useState([]),[file,setFile]=useState(null),[busy,setBusy]=useState(false),[message,setMessage]=useState("");
- function parseCSV(text){const lines=text.replace(/\r/g,"").split("\n").filter(Boolean);if(!lines.length)return [];const sep=lines[0].includes(";")?";":",";return lines.map(line=>line.split(sep).map(v=>v.trim().replace(/^"|"$/g,"")))}
- async function importCSV(){if(!file||preview.length<2)return;setBusy(true);setMessage("");const rows=preview.slice(1);const headers=preview[0].map(x=>x.toLowerCase());const idx=(...names)=>names.map(n=>headers.indexOf(n)).find(i=>i>=0);const dateIdx=idx("data","data da transação","date"),descIdx=idx("descrição","descricao","description"),amountIdx=idx("valor","amount"),typeIdx=idx("tipo","type","natureza");const bank=data.banks[0];if(!bank){setMessage("Cadastre um banco antes da importação.");setBusy(false);return}const mapped=rows.map(r=>{const raw=r[amountIdx]||"0";const amount=Number(raw.replace(/[^0-9,-]/g,"").replace(/\./g,"").replace(",", "."))||0;const type=(r[typeIdx]||"").toLowerCase();return {user_id:data.user.id,bank_account_id:bank.id,fact_date:new Date((r[dateIdx]||today()).split("/").reverse().join("-")+"T12:00:00").toISOString(),competence_date:today(),description:r[descIdx]||"Importado",amount:Math.abs(amount),direction:type.includes("entrada")||type.includes("credito")||type.includes("crédito")||amount>0?"in":"out",classification:type.includes("receita")?"Receita":"Despesas",status:"unreconciled",source:"csv"}});const {error}=await supabase.from("bank_transactions").insert(mapped);if(error)setMessage(error.message);else{setMessage(rows.length+" movimento(s) importado(s).");data.reload()}setBusy(false)}
+ function parseCSV(text){
+  const lines=text.replaceAll("\r","").split("\n").filter(Boolean);
+  if(!lines.length)return [];
+  const sep=lines[0].includes(";")?";":",";
+  return lines.map(line=>line.split(sep).map(v=>{
+    const value=v.trim();
+    return value.startsWith('"')&&value.endsWith('"')?value.slice(1,-1):value;
+  }));
+ }
+ async function importCSV(){
+  if(!file||preview.length<2)return;
+  setBusy(true);
+  setMessage("");
+  const rows=preview.slice(1);
+  const headers=preview[0].map(x=>x.toLowerCase());
+  const idx=(...names)=>names.map(n=>headers.indexOf(n)).find(i=>i>=0);
+  const dateIdx=idx("data","data da transação","date");
+  const descIdx=idx("descrição","descricao","description");
+  const amountIdx=idx("valor","amount");
+  const typeIdx=idx("tipo","type","natureza");
+  const bank=data.banks[0];
+  if(!bank){
+    setMessage("Cadastre um banco antes da importação.");
+    setBusy(false);
+    return;
+  }
+  const mapped=rows.map(r=>{
+    const raw=String(r[amountIdx]||"0").replaceAll("R$","").trim();
+    const normalized=raw.includes(",")?raw.replaceAll(".","").replace(",","."):raw;
+    const amount=Number(normalized)||0;
+    const type=(r[typeIdx]||"").toLowerCase();
+    return {
+      user_id:data.user.id,
+      bank_account_id:bank.id,
+      fact_date:new Date((r[dateIdx]||today()).split("/").reverse().join("-")+"T12:00:00").toISOString(),
+      competence_date:today(),
+      description:r[descIdx]||"Importado",
+      amount:Math.abs(amount),
+      direction:type.includes("entrada")||type.includes("credito")||type.includes("crédito")||amount>0?"in":"out",
+      classification:type.includes("receita")?"Receita":"Despesas",
+      status:"unreconciled",
+      source:"csv"
+    };
+  });
+  const {error}=await supabase.from("bank_transactions").insert(mapped);
+  if(error)setMessage(error.message);
+  else{
+    setMessage(rows.length+" movimento(s) importado(s).");
+    data.reload();
+  }
+  setBusy(false);
+ }
  async function onFile(e){const f=e.target.files?.[0];if(!f)return;setFile(f);const txt=await f.text();setPreview(parseCSV(txt).slice(0,101))}
  return <main className="content"><div className="page-head"><div><h2>Dados / Importações / Backup</h2><p>Importe CSV de extratos e mantenha uma cópia dos dados exportados.</p></div><button className="ghost" onClick={()=>downloadCSV(data.bankTx,"backup-extrato.csv")}><Download size={16}/>Backup CSV</button></div><section className="panel"><h3>Importar extrato CSV</h3><p>Colunas reconhecidas: Data, Descrição, Valor e Tipo. A importação entra como "A conferir".</p><input type="file" accept=".csv,text/csv" onChange={onFile}/>{preview.length>0&&<><div className="table-wrap" style={{marginTop:16}}><table><thead><tr>{preview[0].map((h,i)=><th key={i}>{h}</th>)}</tr></thead><tbody>{preview.slice(1,11).map((r,i)=><tr key={i}>{preview[0].map((_,j)=><td key={j}>{r[j]||""}</td>)}</tr>)}</tbody></table></div><button className="primary" disabled={busy} onClick={importCSV}>{busy?"Importando...":"Importar "+Math.max(0,preview.length-1)+" linhas"}</button></>}</section>{message&&<section className="panel"><div className="success">{message}</div></section></main>
 }
