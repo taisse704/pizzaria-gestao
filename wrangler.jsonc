@@ -1,3 +1,4 @@
+// Deploy trigger: Cloudflare Build token refreshed 2026-10-07
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "pizzaria-gestao",
