@@ -124,18 +124,27 @@ function Vendas({data}){
  const pizzas=products.filter(p=>["Pizzas Tradicionais","Pizzas Especiais"].includes(categoryName(p)));
  const drinks=products.filter(p=>categoryName(p)==="Bebidas");
  const borders=products.filter(p=>categoryName(p)==="Bordas Recheadas");
- const priceFor=(p,size)=>Number(p?.["price_"+String(size||"").toLowerCase()]??p?.sale_price??0);
- const blankLine=()=>({type:"pizza",product_id:"",flavor_2_product_id:"",size:"G",border_product_id:"",quantity:"1"});
- const blank={fact_date:today(),customer_name:"",customer_phone:"",customer_address:"",delivery_fee:"0",discounts:"0",fees:"0",cancellations:"0",payment_method:"PIX",channel_id:data.channels.find(x=>x.name==="Direto")?.id||"",source:"manual",lines:[blankLine()]};
+ const sizeLabel={P:"Pequena",M:"Média",G:"Grande",F:"Família"};
+ const priceFor=(p,size)=>{
+   if(!p||!size)return 0;
+   const key="price_"+String(size).toLowerCase();
+   return p[key]==null?0:Number(p[key]);
+ };
+ const newPizza=()=>({type:"pizza",product_id:"",flavor_2_product_id:"",size:"",border_product_id:"",quantity:"1"});
+ const newProduct=()=>({type:"product",category:"",product_id:"",size:"",quantity:"1"});
+ const blank={fact_date:today(),customer_name:"",customer_phone:"",customer_address:"",delivery_fee:"0",discounts:"0",fees:"0",cancellations:"0",payment_method:"PIX",channel_id:data.channels.find(x=>x.name==="Direto")?.id||"",source:"manual",lines:[newPizza()]};
  const [form,setForm]=useState(blank);
  const lineValue=line=>{
-   if(line.type==="drink"){const p=products.find(x=>x.id===line.product_id);return Number(p?.sale_price||0)*Math.max(1,Number(line.quantity||1))}
-   const p1=products.find(x=>x.id===line.product_id),p2=products.find(x=>x.id===line.flavor_2_product_id);
-   if(!p1)return 0;
-   const a=priceFor(p1,line.size);
-   const pizza=!p2?a:(a+priceFor(p2,line.size))/2;
-   const b=products.find(x=>x.id===line.border_product_id);
-   return (pizza+priceFor(b,line.size))*Math.max(1,Number(line.quantity||1));
+   const qty=Math.max(1,Number(line.quantity||1));
+   if(line.type==="pizza"){
+     const p1=products.find(x=>x.id===line.product_id),p2=products.find(x=>x.id===line.flavor_2_product_id),b=products.find(x=>x.id===line.border_product_id);
+     if(!p1||!line.size)return 0;
+     const a=priceFor(p1,line.size),pizza=p2?(a+priceFor(p2,line.size))/2:a;
+     return (pizza+(b?priceFor(b,line.size):0))*qty;
+   }
+   const p=products.find(x=>x.id===line.product_id);
+   if(!p)return 0;
+   return (line.category==="Bordas Recheadas"?priceFor(p,line.size):Number(p.sale_price||0))*qty;
  };
  const itemTotal=form.lines.reduce((sum,line)=>sum+lineValue(line),0);
  const gross=itemTotal+Number(form.delivery_fee||0),net=gross-Number(form.discounts||0)-Number(form.fees||0)-Number(form.cancellations||0);
@@ -143,21 +152,25 @@ function Vendas({data}){
    const d=String(x.fact_date||"").slice(0,10),ym=d.slice(0,7);
    return (!month||ym===month)&&(!dateFrom||d>=dateFrom)&&(!dateTo||d<=dateTo)&&(!channel||x.channel_id===channel)&&(!payment||String(x.payment_method||"")===payment);
  });
- function reset(){setEditing(null);setForm({...blank,channel_id:data.channels.find(x=>x.name==="Direto")?.id||"",lines:[blankLine()]});setOpen(true)}
+ function reset(){setEditing(null);setForm({...blank,channel_id:data.channels.find(x=>x.name==="Direto")?.id||"",lines:[newPizza()]});setOpen(true)}
  function editSale(x){
    const items=x.sale_items||[];
    const lines=items.map(i=>{
-     if(i.item_type==="drink")return {type:"drink",product_id:products.find(p=>p.id===i.product_id)?.id||products.find(p=>p.name===i.product_name)?.id||"",flavor_2_product_id:"",size:"",border_product_id:"",quantity:String(i.quantity||1)};
-     return {type:"pizza",product_id:products.find(p=>p.id===i.product_id)?.id||products.find(p=>p.name===i.product_name)?.id||"",flavor_2_product_id:products.find(p=>p.id===i.flavor_2_product_id)?.id||"",size:i.size||"G",border_product_id:products.find(p=>p.id===i.border_product_id)?.id||"",quantity:String(i.quantity||1)};
+     const p=products.find(p=>p.id===i.product_id)||products.find(p=>p.name===i.product_name);
+     if(i.item_type==="pizza")return {type:"pizza",product_id:p?.id||"",flavor_2_product_id:products.find(p=>p.id===i.flavor_2_product_id)?.id||"",size:i.size||"",border_product_id:products.find(p=>p.id===i.border_product_id)?.id||"",quantity:String(i.quantity||1)};
+     return {type:"product",category:categoryName(p),product_id:p?.id||"",size:i.size||"",quantity:String(i.quantity||1)};
    });
-   setEditing(x);setForm({fact_date:String(x.fact_date||"").slice(0,10)||today(),customer_name:x.customer_name||"",customer_phone:x.customer_phone||"",customer_address:x.customer_address||"",delivery_fee:String(x.delivery_fee||0),discounts:String(x.discounts||0),fees:String(x.fees||0),cancellations:String(x.cancellations||0),payment_method:x.payment_method||"PIX",channel_id:x.channel_id||"",source:x.source||"manual",lines:lines.length?lines:[blankLine()]});setOpen(true);
+   setEditing(x);setForm({fact_date:String(x.fact_date||"").slice(0,10)||today(),customer_name:x.customer_name||"",customer_phone:x.customer_phone||"",customer_address:x.customer_address||"",delivery_fee:String(x.delivery_fee||0),discounts:String(x.discounts||0),fees:String(x.fees||0),cancellations:String(x.cancellations||0),payment_method:x.payment_method||"PIX",channel_id:x.channel_id||"",source:"manual",lines:lines.length?lines:[newPizza()]});setOpen(true);
  }
- function updateLine(index,patch){setForm(f=>({...f,lines:f.lines.map((l,i)=>i===index?{...l,...patch}:l)}))}
- function addLine(type){setForm(f=>({...f,lines:[...f.lines,{...blankLine(),type,product_id:"",flavor_2_product_id:"",border_product_id:""}]}))}
- function removeLine(index){setForm(f=>({...f,lines:f.lines.filter((_,i)=>i!==index).length?f.lines.filter((_,i)=>i!==index):[blankLine()]}))}
+ function updateLine(i,patch){setForm(f=>({...f,lines:f.lines.map((l,n)=>n===i?{...l,...patch}:l)}))}
+ function addPizza(){setForm(f=>({...f,lines:[...f.lines,newPizza()]}))}
+ function addProduct(){setForm(f=>({...f,lines:[...f.lines,newProduct()]}))}
+ function removeLine(i){setForm(f=>{const lines=f.lines.filter((_,n)=>n!==i);return {...f,lines:lines.length?lines:[newPizza()]}})}
  async function save(e){
   e.preventDefault();
   if(form.lines.some(l=>!l.product_id))return alert("Selecione o produto de cada item.");
+  if(form.lines.some(l=>l.type==="pizza"&&!l.size))return alert("Selecione o tamanho de todas as pizzas.");
+  if(form.lines.some(l=>l.type==="product"&&l.category==="Bordas Recheadas"&&!l.size))return alert("Selecione o tamanho de todas as bordas.");
   setSaving(true);
   try{
    const payload={channel_id:form.channel_id||null,fact_date:new Date(form.fact_date+"T12:00:00").toISOString(),competence_date:form.fact_date,payment_method:form.payment_method,source:"manual",customer_name:form.customer_name.trim()||null,customer_phone:form.customer_phone.trim()||null,customer_address:form.customer_address.trim()||null,gross_amount:gross,delivery_fee:Number(form.delivery_fee||0),discounts:Number(form.discounts||0),fees:Number(form.fees||0),cancellations:Number(form.cancellations||0),net_amount:net};
@@ -166,7 +179,7 @@ function Vendas({data}){
    else{const {data:sale,error}=await supabase.from("sales").insert({...payload,user_id:data.user.id}).select("id").single();if(error)throw error;saleId=sale.id}
    const itemRows=form.lines.map(line=>{
      const p=products.find(x=>x.id===line.product_id),p2=products.find(x=>x.id===line.flavor_2_product_id),b=products.find(x=>x.id===line.border_product_id),qty=Math.max(1,Number(line.quantity||1));
-     return {sale_id:saleId,product_id:p.id,product_name:p.name,quantity:qty,unit_price:lineValue({...line,quantity:1}),total_amount:lineValue(line),item_type:line.type,size:line.type==="pizza"?line.size:null,flavor_2_product_id:p2?.id||null,flavor_2_name:p2?.name||null,border_product_id:b?.id||null,border_name:b?.name||null,notes:line.type==="pizza"?(p2?("Meia "+p.name+" + meia "+p2.name):p.name):p.name};
+     return {sale_id:saleId,product_id:p.id,product_name:p.name,quantity:qty,unit_price:lineValue({...line,quantity:1}),total_amount:lineValue(line),item_type:line.type==="pizza"?"pizza":"product",size:(line.type==="pizza"||line.category==="Bordas Recheadas")?line.size:null,flavor_2_product_id:p2?.id||null,flavor_2_name:p2?.name||null,border_product_id:b?.id||null,border_name:b?.name||null,notes:line.type==="pizza"?(p2?("Meia "+p.name+" + meia "+p2.name):p.name):p.name};
    });
    const {error:itemError}=await supabase.from("sale_items").insert(itemRows);if(itemError)throw itemError;
    const {data:recv}=await supabase.from("receivables").select("id").eq("sale_id",saleId).limit(1);
@@ -179,21 +192,33 @@ function Vendas({data}){
   if(!confirm("Excluir esta venda e seus itens?"))return;
   try{await supabase.from("receivables").delete().eq("sale_id",x.id);await supabase.from("sale_items").delete().eq("sale_id",x.id);const {error}=await supabase.from("sales").delete().eq("id",x.id).eq("user_id",data.user.id);if(error)throw error;data.reload()}catch(error){alert(error?.message||"Não foi possível excluir a venda.")}
  }
- return <main className="content"><div className="page-head"><div><h2>Vendas</h2><p>Vendas diretas da pizzaria, com cliente, pizza por tamanho, meia a meia, borda, bebidas, entrega e pagamento.</p></div><button className="primary small" onClick={reset}><Plus size={16}/>Nova venda direta</button></div>
+ return <main className="content"><div className="page-head"><div><h2>Vendas</h2><p>Venda direta: vários itens no mesmo pedido, pizzas por tamanho, meia a meia, bordas, bebidas, taxa de entrega e pagamento.</p></div><button className="primary small" onClick={reset}><Plus size={16}/>Nova venda direta</button></div>
  <div className="filters"><label>Mês <input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></label><label>De <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}/></label><label>Até <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}/></label><select value={channel} onChange={e=>setChannel(e.target.value)}><option value="">Todos os canais</option>{data.channels.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select><select value={payment} onChange={e=>setPayment(e.target.value)}><option value="">Todos os pagamentos</option>{["PIX","Dinheiro","Cartão de crédito","Cartão de débito"].map(x=><option key={x}>{x}</option>)}</select><div className="search"><Search size={16}/><input placeholder="Pesquisar..." value={data.search} onChange={e=>data.setSearch(e.target.value)}/></div></div>
  <div className="table-wrap"><table><thead><tr><th>Data</th><th>Cliente</th><th>Canal</th><th>Pagamento</th><th>Bruta</th><th>Taxas/Descontos</th><th>Líquida</th><th>Ações</th></tr></thead><tbody>{rows.map(x=><tr key={x.id}><td>{new Date(x.fact_date).toLocaleDateString("pt-BR")}</td><td>{x.customer_name||"—"}</td><td>{x.channels?.name||"—"}</td><td>{x.payment_method||"—"}</td><td>{money(x.gross_amount)}</td><td>{money(Number(x.discounts||0)+Number(x.fees||0)+Number(x.cancellations||0))}</td><td><b>{money(x.net_amount)}</b></td><td><button className="icon-btn" title="Editar" onClick={()=>editSale(x)}>✏️</button><button className="icon-btn" title="Excluir" onClick={()=>removeSale(x)}>🗑️</button></td></tr>)}{!rows.length&&<EmptyRow text="Nenhuma venda encontrada."/>}</tbody></table></div>
  {open&&<Modal title={editing?"Editar venda direta":"Nova venda direta"} onClose={()=>setOpen(false)}><form className="form-grid" onSubmit={save}>
  <Field label="Cliente"><input value={form.customer_name} onChange={e=>setForm({...form,customer_name:e.target.value})} placeholder="Nome do cliente"/></Field><Field label="Telefone"><input value={form.customer_phone} onChange={e=>setForm({...form,customer_phone:e.target.value})} placeholder="Telefone"/></Field><Field label="Endereço"><input value={form.customer_address} onChange={e=>setForm({...form,customer_address:e.target.value})} placeholder="Para entrega"/></Field><Field label="Data"><input type="date" value={form.fact_date} onChange={e=>setForm({...form,fact_date:e.target.value})} required/></Field>
- <div className="panel" style={{gridColumn:"1/-1"}}><div className="section-title"><h3>Itens do pedido</h3><div><button type="button" className="ghost small" onClick={()=>addLine("pizza")}>+ Pizza</button> <button type="button" className="ghost small" onClick={()=>addLine("drink")}>+ Refrigerante</button></div></div>
- {form.lines.map((line,i)=><div className="form-grid" key={i} style={{borderBottom:"1px solid #eee",padding:"12px 0",marginBottom:4}}>
-  <Field label="Tipo"><select value={line.type} onChange={e=>updateLine(i,{type:e.target.value,product_id:"",flavor_2_product_id:"",border_product_id:""})}><option value="pizza">Pizza</option><option value="drink">Refrigerante</option></select></Field>
-  {line.type==="pizza"?<><Field label="Tamanho"><select value={line.size} onChange={e=>updateLine(i,{size:e.target.value})}><option>P</option><option>M</option><option>G</option><option>F</option></select></Field><Field label="Sabor 1"><select value={line.product_id} onChange={e=>updateLine(i,{product_id:e.target.value})}><option value="">Selecione</option>{pizzas.map(p=><option key={p.id} value={p.id}>{p.name} — {money(priceFor(p,line.size))}</option>)}</select></Field><Field label="Sabor 2 (meia a meia)"><select value={line.flavor_2_product_id} onChange={e=>updateLine(i,{flavor_2_product_id:e.target.value})}><option value="">Pizza inteira / sem 2º sabor</option>{pizzas.filter(p=>p.id!==line.product_id).map(p=><option key={p.id} value={p.id}>{p.name} — {money(priceFor(p,line.size))}</option>)}</select></Field><Field label="Borda"><select value={line.border_product_id} onChange={e=>updateLine(i,{border_product_id:e.target.value})}><option value="">Sem borda</option>{borders.map(p=><option key={p.id} value={p.id}>{p.name} — {money(priceFor(p,line.size))}</option>)}</select></Field></>:<Field label="Refrigerante"><select value={line.product_id} onChange={e=>updateLine(i,{product_id:e.target.value})}><option value="">Selecione</option>{drinks.map(p=><option key={p.id} value={p.id}>{p.name} — {money(p.sale_price)}</option>)}</select></Field>}
-  <Field label="Quantidade"><input type="number" min="1" step="1" value={line.quantity} onChange={e=>updateLine(i,{quantity:e.target.value})}/></Field><div style={{alignSelf:"end"}}><b>{money(lineValue(line))}</b> <button type="button" className="icon-btn" title="Remover item" onClick={()=>removeLine(i)}>🗑️</button></div>
+ <div className="panel" style={{gridColumn:"1/-1"}}><div className="section-title"><h3>Itens da venda</h3><div><button type="button" className="ghost small" onClick={addPizza}>➕ Adicionar pizza</button><button type="button" className="ghost small" onClick={addProduct}>➕ Adicionar outro produto</button></div></div>
+ {form.lines.map((line,i)=><div className="panel" key={i} style={{marginBottom:12,border:"1px solid #eee"}}>
+  {line.type==="pizza"?<><div className="section-title"><h4>🍕 Pizza {i+1}</h4><button type="button" className="icon-btn" onClick={()=>removeLine(i)}>🗑️</button></div>
+   <div className="form-grid"><Field label="Tamanho"><select required value={line.size} onChange={e=>updateLine(i,{size:e.target.value})}><option value="">Selecione</option><option value="P">Pequena</option><option value="M">Média</option><option value="G">Grande</option><option value="F">Família</option></select></Field>
+   <Field label="Tipo"><select value={line.flavor_2_product_id?"half":"whole"} onChange={e=>updateLine(i,{flavor_2_product_id:e.target.value==="half"?(line.flavor_2_product_id||""): ""})}><option value="whole">Pizza inteira</option><option value="half">Meio a meio</option></select></Field>
+   <Field label="1º sabor"><select required value={line.product_id} onChange={e=>updateLine(i,{product_id:e.target.value})}><option value="">Selecione</option>{pizzas.map(p=><option key={p.id} value={p.id}>{p.name} — {line.size?money(priceFor(p,line.size)):"selecione o tamanho"}</option>)}</select></Field>
+   {line.flavor_2_product_id&&<Field label="2º sabor"><select required value={line.flavor_2_product_id} onChange={e=>updateLine(i,{flavor_2_product_id:e.target.value})}><option value="">Selecione</option>{pizzas.filter(p=>p.id!==line.product_id).map(p=><option key={p.id} value={p.id}>{p.name} — {money(priceFor(p,line.size))}</option>)}</select></Field>}
+   <Field label="Quantidade"><input type="number" min="1" step="1" value={line.quantity} onChange={e=>updateLine(i,{quantity:e.target.value})}/></Field>
+   <Field label="Borda (opcional)"><select value={line.border_product_id} onChange={e=>updateLine(i,{border_product_id:e.target.value})}><option value="">Sem borda</option>{borders.map(p=><option key={p.id} value={p.id}>{p.name} — {line.size?money(priceFor(p,line.size)):"selecione o tamanho"}</option>)}</select></Field>
+   <div style={{alignSelf:"end"}}><b>{line.size&&line.product_id?money(lineValue(line)):money(0)}</b></div></div>
+  </>:<><div className="section-title"><h4>➕ Outro produto {i+1}</h4><button type="button" className="icon-btn" onClick={()=>removeLine(i)}>🗑️</button></div>
+   <div className="form-grid"><Field label="Categoria"><select value={line.category} onChange={e=>updateLine(i,{category:e.target.value,product_id:"",size:""})}><option value="">Selecione</option><option value="Pizzas">Pizzas</option><option value="Bebidas">Bebidas</option><option value="Bordas Recheadas">Bordas Recheadas</option></select></Field>
+   <Field label="Produto"><select required value={line.product_id} onChange={e=>updateLine(i,{product_id:e.target.value})}><option value="">Selecione</option>{products.filter(p=>{const n=categoryName(p);return line.category==="Pizzas"?(n==="Pizzas Tradicionais"||n==="Pizzas Especiais"):n===line.category}).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
+   {line.category==="Bordas Recheadas"&&<Field label="Variação / Tamanho"><select required value={line.size} onChange={e=>updateLine(i,{size:e.target.value})}><option value="">Selecione</option><option value="P">Pequena — {line.product_id?money(priceFor(products.find(p=>p.id===line.product_id),"P")):""}</option><option value="M">Média — {line.product_id?money(priceFor(products.find(p=>p.id===line.product_id),"M")):""}</option><option value="G">Grande — {line.product_id?money(priceFor(products.find(p=>p.id===line.product_id),"G")):""}</option><option value="F">Família — {line.product_id?money(priceFor(products.find(p=>p.id===line.product_id),"F")):""}</option></select></Field>}
+   {line.category==="Pizzas"&&<Field label="Variação / Tamanho"><select required value={line.size} onChange={e=>updateLine(i,{size:e.target.value})}><option value="">Selecione</option><option value="P">Pequena</option><option value="M">Média</option><option value="G">Grande</option><option value="F">Família</option></select></Field>}
+   <Field label="Quantidade"><input type="number" min="1" step="1" value={line.quantity} onChange={e=>updateLine(i,{quantity:e.target.value})}/></Field><div style={{alignSelf:"end"}}><b>{line.product_id?money(lineValue(line)):money(0)}</b></div></div>
+  </>}
  </div>)}
- <div style={{textAlign:"right",fontSize:18}}><b>Itens: {money(itemTotal)}</b></div></div>
+ <div style={{textAlign:"right",fontSize:18}}><b>Produtos: {money(itemTotal)}</b></div></div>
  <Field label="Canal"><select value={form.channel_id} onChange={e=>setForm({...form,channel_id:e.target.value})}><option value="">Selecione</option>{data.channels.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></Field><Field label="Forma de pagamento"><select value={form.payment_method} onChange={e=>setForm({...form,payment_method:e.target.value})}><option>PIX</option><option>Dinheiro</option><option>Cartão de crédito</option><option>Cartão de débito</option></select></Field>
  <Field label="Taxa de entrega"><input type="number" step="0.01" min="0" value={form.delivery_fee} onChange={e=>setForm({...form,delivery_fee:e.target.value})}/></Field><Field label="Desconto"><input type="number" step="0.01" min="0" value={form.discounts} onChange={e=>setForm({...form,discounts:e.target.value})}/></Field>
- <div className="panel" style={{gridColumn:"1/-1"}}><b>Resumo:</b> Itens {money(itemTotal)} + taxa de entrega {money(form.delivery_fee)} - desconto {money(form.discounts)} = <b>{money(net)}</b></div><div className="form-actions"><button className="primary" disabled={saving}>{saving?"Salvando...":editing?"Salvar alterações":"Salvar venda"}</button></div>
+ <div className="panel" style={{gridColumn:"1/-1"}}><b>Resumo:</b> Produtos {money(itemTotal)} + taxa de entrega {money(form.delivery_fee)} - desconto {money(form.discounts)} = <b>{money(net)}</b></div><div className="form-actions"><button className="primary" disabled={saving}>{saving?"Salvando...":editing?"Salvar alterações":"Salvar venda"}</button></div>
  </form></Modal>}</main>
 }
 function Bancos({data}){
