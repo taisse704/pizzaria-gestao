@@ -293,7 +293,7 @@ function useData(user){
 }
 export default function App(){
  const [user,setUser]=useState(null),[active,setActive]=useState("dashboard"),[mobile,setMobile]=useState(false),data=useData(user||{id:""});
- useEffect(()=>{if(!supabase)return;supabase.auth.getSession().then(async({data})=>{if(data.session?.user){await seedUser(data.session.user);setUser(data.session.user)}});const {data:{subscription}}=supabase.auth.onAuthStateChange(async(_e,s)=>{setUser(s?.user??null);if(s?.user)await seedUser(s.user)});return()=>subscription.unsubscribe()},[]);
+ useEffect(()=>{if(!supabase)return;let mounted=true;supabase.auth.getSession().then(({data})=>{if(mounted&&data.session?.user){setUser(data.session.user);seedUser(data.session.user).catch(error=>console.warn("Erro ao preparar dados iniciais:",error))}});const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>{if(!mounted)return;setUser(s?.user??null);if(s?.user)seedUser(s.user).catch(error=>console.warn("Erro ao preparar dados iniciais:",error))});return()=>{mounted=false;subscription.unsubscribe()}},[]);
  async function logout(){await supabase?.auth.signOut();setUser(null)}
  if(!user)return <Login onLogin={setUser}/>;
  const current=modules.find(m=>m[0]===active), Icon=current?.[2];
