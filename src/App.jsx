@@ -315,12 +315,109 @@ function Cardapio({data}){
  <div className="form-actions"><button className="primary">{editing?"Salvar alterações":"Incluir item"}</button></div></form></Modal>}</main>
 }
 function Conciliacao({data}){
- const pending=(data.bankTx||[]).filter(x=>x.status!=="reconciled");
- async function reconcile(tx,targetType,targetId,amount){const {error:e1}=await supabase.from("reconciliation_links").insert({user_id:data.user.id,bank_transaction_id:tx.id,target_type:targetType,target_id:targetId,matched_amount:amount});if(e1){alert(e1.message);return}const {error:e2}=await supabase.from("bank_transactions").update({status:"reconciled"}).eq("id",tx.id);if(e2)alert(e2.message);else data.reload()}
- const suggestion=tx=>{const list=tx.direction==="in"?data.receivables.filter(r=>r.status!=="received"):data.payables.filter(p=>p.status!=="paid");return list.find(r=>Math.abs(Number(r.amount)-Number(tx.amount))<0.01)};
- return <main className="content"><div className="page-head"><div><h2>Conciliação</h2><p>Relacione cada movimento bancário ao recebimento ou pagamento correspondente e evite dupla contagem.</p></div></div><div className="table-wrap"><table><thead><tr><th>Data</th><th>Descrição</th><th>Valor</th><th>Possível correspondência</th><th>Ação</th></tr></thead><tbody>{pending.map(tx=>{const s=suggestion(tx);return <tr key={tx.id}><td>{dateBR(tx.fact_date)}</td><td>{tx.description}</td><td>{money(tx.amount)}</td><td>{s?(s.description||"Registro")+" • "+money(s.amount):"Nenhuma automática"}</td><td>{s&&<button className="primary small" onClick={()=>reconcile(tx,tx.direction==="in"?"receivable":"payable",s.id,Math.min(Number(tx.amount),Number(s.amount)))}>Conferir</button>}</td></tr>})}{!pending.length&&<EmptyRow text="Tudo conciliado."/>}</tbody></table></div></main>
+ const [selectedTx,setSelectedTx]=useState("");
+ const [selectedSales,setSelectedSales]=useState([]);
+ const [fees,setFees]=useState("0");
+ const [adjustments,setAdjustments]=useState("0");
+ const [channelFilter,setChannelFilter]=useState("");
+ const [saving,setSaving]=useState(false);
+ const [batches,setBatches]=useState([]);
+ const [loadingBatches,setLoadingBatches]=useState(true);
+ const pending=(data.bankTx||[]).filter(x=>x.status!=="reconciled"&&x.direction==="in");
+ const tx=pending.find(x=>x.id===selectedTx);
+ const loadBatches=async()=>{
+   setLoadingBatches(true);
+   const {data:rows,error}=await supabase.from("reconciliation_batches").select("*,channels(name),bank_transactions(description,fact_date,amount),reconciliation_batch_items(sale_id,matched_amount)").eq("user_id",data.user.id).order("created_at",{ascending:false});
+   if(error)console.warn("Não foi possível carregar os repasses conciliados:",error);
+   setBatches(rows||[]);
+   setLoadingBatches(false);
+ };
+ useEffect(()=>{loadBatches()},[data.user.id,data.bankTx.length]);
+ const usedSaleIds=new Set((batches||[]).flatMap(b=>(b.reconciliation_batch_items||[]).map(i=>i.sale_id)));
+ const availableSales=(data.sales||[]).filter(s=>{
+   if(s.status==="cancelled"||usedSaleIds.has(s.id))return false;
+   const channelName=normalizeHeader(s.channels?.name||data.channels.find(c=>c.id===s.channel_id)?.name||"");
+   if(channelFilter&&!channelName.includes(normalizeHeader(channelFilter)))return false;
+   return ["ifood","beefood","99food"].includes(normalizeHeader(channelName));
+ }).sort((a,b)=>String(b.fact_date||"").localeCompare(String(a.fact_date||"")));
+ const selected=availableSales.filter(s=>selectedSales.includes(s.id));
+ const salesNet=selected.reduce((sum,s)=>sum+Number(s.net_amount||0),0);
+ const feeValue=Number(fees||0);
+ const adjustmentValue=Number(adjustments||0);
+ const expectedNet=salesNet-feeValue+adjustmentValue;
+ const difference=tx?Number(tx.amount||0)-expectedNet:0;
+ function toggleSale(id){setSelectedSales(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id])}
+ function clearSelection(){setSelectedSales([]);setSelectedTx("");setFees("0");setAdjustments("0")}
+ function chooseTx(x){
+   setSelectedTx(x.id);
+   const desc=normalizeHeader(x.description||"");
+   if(desc.includes("beefood"))setFees("1.99");else setFees("0");
+ }
+ async function createBatch(){
+   if(!tx)return alert("Selecione primeiro o repasse/movimento bancário.");
+   if(!selected.length)return alert("Selecione pelo menos uma venda que pertence a este repasse.");
+   if(Math.abs(difference)>0.01&&!confirm("O valor do banco não fecha com as vendas selecionadas após taxas/ajustes. Deseja salvar mesmo assim para registrar a diferença?"))return;
+   setSaving(true);
+   try{
+     const channelName=selected[0]?.channels?.name||data.channels.find(c=>c.id===selected[0]?.channel_id)?.name||null;
+     const channelId=selected[0]?.channel_id||null;
+     const {data:batch,error}=await supabase.from("reconciliation_batches").insert({user_id:data.user.id,bank_transaction_id:tx.id,channel_id:channelId,gross_amount:salesNet,fees:feeValue,adjustments:adjustmentValue,net_amount:Number(tx.amount||0),notes:channelName?("Repasse "+channelName):"Repasse"}).select("id").single();
+     if(error)throw error;
+     const links=selected.map(s=>({batch_id:batch.id,sale_id:s.id,matched_amount:Number(s.net_amount||0)}));
+     const {error:linkError}=await supabase.from("reconciliation_batch_items").insert(links);
+     if(linkError)throw linkError;
+     for(const s of selected){
+       const {data:recv}=await supabase.from("receivables").select("id").eq("sale_id",s.id).eq("user_id",data.user.id).limit(1);
+       if(recv?.[0]){
+         const {error:e}=await supabase.from("receivables").update({received_amount:Number(s.net_amount||0),received_date:String(tx.fact_date||"").slice(0,10)||today(),status:"received",bank_account_id:tx.bank_account_id}).eq("id",recv[0].id).eq("user_id",data.user.id);
+         if(e)throw e;
+       }
+     }
+     const {error:txError}=await supabase.from("bank_transactions").update({status:"reconciled",reference_type:"reconciliation_batch",reference_id:batch.id}).eq("id",tx.id).eq("user_id",data.user.id);
+     if(txError)throw txError;
+     clearSelection();await loadBatches();data.reload();
+   }catch(error){alert(error?.message||"Não foi possível conciliar o repasse.")}finally{setSaving(false)}
+ }
+ async function undoBatch(batch){
+   if(!confirm("Desfazer esta conciliação e devolver as vendas para pendente?"))return;
+   try{
+     const items=batch.reconciliation_batch_items||[];
+     for(const item of items){
+       await supabase.from("receivables").update({received_amount:0,received_date:null,status:"pending",bank_account_id:null}).eq("sale_id",item.sale_id).eq("user_id",data.user.id);
+     }
+     const {error:e1}=await supabase.from("bank_transactions").update({status:"unreconciled",reference_type:null,reference_id:null}).eq("id",batch.bank_transaction_id).eq("user_id",data.user.id);
+     if(e1)throw e1;
+     const {error:e2}=await supabase.from("reconciliation_batches").delete().eq("id",batch.id).eq("user_id",data.user.id);
+     if(e2)throw e2;
+     await loadBatches();data.reload();
+   }catch(error){alert(error?.message||"Não foi possível desfazer a conciliação.")}
+ }
+ return <main className="content">
+  <div className="page-head"><div><h2>Conciliação</h2><p>Concilie um repasse do banco com uma ou várias vendas. As taxas do repasse ficam separadas das taxas da venda.</p></div></div>
+  <section className="panel">
+   <div className="section-title"><h3>➕ Novo repasse</h3><span>{pending.length} recebimento(s) bancário(s) pendente(s)</span></div>
+   <div className="form-grid">
+    <Field label="Repasse / entrada no banco"><select value={selectedTx} onChange={e=>{const x=pending.find(t=>t.id===e.target.value);x?chooseTx(x):setSelectedTx("")}}><option value="">Selecione o recebimento...</option>{pending.map(x=><option key={x.id} value={x.id}>{dateBR(String(x.fact_date||"").slice(0,10))} • {money(x.amount)} • {x.description}</option>)}</select></Field>
+    <Field label="Canal"><select value={channelFilter} onChange={e=>{setChannelFilter(e.target.value);setSelectedSales([])}}><option value="">Todos</option>{data.channels.filter(c=>["ifood","beefood","99food"].includes(normalizeHeader(c.name))).map(c=><option key={c.id} value={c.name}>{c.name}</option>)}</select></Field>
+    <Field label="Taxa deste repasse"><input type="number" step="0.01" value={fees} onChange={e=>setFees(e.target.value)} placeholder="Ex.: 1,99"/></Field>
+    <Field label="Ajuste (+/-)"><input type="number" step="0.01" value={adjustments} onChange={e=>setAdjustments(e.target.value)} placeholder="0,00"/></Field>
+   </div>
+   <div className="summary-grid" style={{marginTop:16}}>
+    <div><b>{money(salesNet)}</b><span>líquido das vendas selecionadas</span></div>
+    <div><b>{money(feeValue)}</b><span>taxa do repasse</span></div>
+    <div><b>{money(expectedNet)}</b><span>valor esperado</span></div>
+    <div><b>{money(difference)}</b><span>diferença banco × esperado</span></div>
+   </div>
+   <div className="table-wrap" style={{marginTop:16}}><table><thead><tr><th></th><th>Data</th><th>Canal</th><th>Descrição</th><th>Bruto</th><th>Taxas</th><th>Líquido</th></tr></thead><tbody>{availableSales.map(s=>{const checked=selectedSales.includes(s.id);return <tr key={s.id}><td><input type="checkbox" checked={checked} onChange={()=>toggleSale(s.id)}/></td><td>{dateBR(String(s.fact_date||"").slice(0,10))}</td><td>{s.channels?.name||data.channels.find(c=>c.id===s.channel_id)?.name||"—"}</td><td>{s.external_id||"Venda"}{s.payment_method?" • "+s.payment_method:""}</td><td>{money(s.gross_amount)}</td><td>{money(s.fees+s.discounts)}</td><td>{money(s.net_amount)}</td></tr>)}{!availableSales.length&&<EmptyRow text="Nenhuma venda de plataforma disponível para vincular."/>}</tbody></table></div>
+   <div className="actions" style={{marginTop:16}}><button className="primary" disabled={saving||!selected.length||!tx} onClick={createBatch}>{saving?"Conciliando...":"Conciliar repasse"}</button><button className="ghost" onClick={clearSelection}>Limpar</button></div>
+   {tx&&<p className={Math.abs(difference)<=0.01?"success":"error"} style={{marginTop:12}}>{Math.abs(difference)<=0.01?"Fechamento conferido: o valor do banco bate com o esperado.":"Atenção: o banco e as vendas selecionadas têm uma diferença de "+money(difference)+"."}</p>}
+  </section>
+  <section className="panel">
+   <div className="section-title"><h3>Repasses já conciliados</h3></div>
+   <div className="table-wrap"><table><thead><tr><th>Data</th><th>Canal</th><th>Vendas</th><th>Vendas líquidas</th><th>Taxa repasse</th><th>Recebido</th><th></th></tr></thead><tbody>{batches.map(b=><tr key={b.id}><td>{dateBR(String(b.bank_transactions?.fact_date||"").slice(0,10))}</td><td>{b.channels?.name||"—"}</td><td>{(b.reconciliation_batch_items||[]).length}</td><td>{money(b.gross_amount)}</td><td>{money(b.fees)}</td><td>{money(b.net_amount)}</td><td><button className="ghost small" onClick={()=>undoBatch(b)}>Desfazer</button></td></tr>)}{!batches.length&&!loadingBatches&&<EmptyRow text="Nenhum repasse conciliado ainda."/>}</tbody></table></div>
+  </section>
+ </main>
 }
-
 function normalizeHeader(v){return String(v??"").normalize("NFD").split("").filter(ch=>{const n=ch.charCodeAt(0);return n<768||n>879}).join("").toLowerCase().split("").map(ch=>{const n=ch.charCodeAt(0);return (n>=97&&n<=122)||(n>=48&&n<=57)?ch:" "}).join("").replaceAll("  "," ").trim()}
 function parseMoney(v){if(typeof v==="number")return v;let s=String(v??"").replaceAll("R$","").replaceAll("BRL","").replaceAll(" ","").trim();if(!s)return 0;if(s.includes(",")&&s.includes(".")){if(s.lastIndexOf(",")>s.lastIndexOf("."))s=s.split(".").join("").replace(",",".");else s=s.split(",").join("")}else if(s.includes(","))s=s.replace(",",".");return Number(s)||0}
 function parseExcelDate(v){if(v instanceof Date&&!Number.isNaN(v.getTime()))return v.toISOString().slice(0,10);if(typeof v==="number"){const d=new Date(Math.round((v-25569)*86400*1000));return Number.isNaN(d.getTime())?today():d.toISOString().slice(0,10)}const s=String(v??"").trim();if(!s)return today();const parts=s.split("/");if(parts.length===3&&parts[0].length<=2&&parts[1].length<=2&&parts[2].length===4){const [d,m,y]=parts;return y+"-"+m.padStart(2,"0")+"-"+d.padStart(2,"0")}if(s.length>=10&&s[4]==="-"&&s[7]==="-")return s.slice(0,10);const d=new Date(s);return Number.isNaN(d.getTime())?today():d.toISOString().slice(0,10)}
