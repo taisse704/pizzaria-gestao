@@ -130,7 +130,7 @@ function Vendas({data}){
    const key="price_"+String(size).toLowerCase();
    return p[key]==null?0:Number(p[key]);
  };
- const newPizza=()=>({type:"pizza",product_id:"",flavor_2_product_id:"",size:"",border_product_id:"",quantity:"1"});
+ const newPizza=()=>({type:"pizza",product_id:"",flavor_2_product_id:"",half:false,size:"",border_product_id:"",quantity:"1"});
  const newProduct=()=>({type:"product",category:"",product_id:"",size:"",quantity:"1"});
  const blank={fact_date:today(),customer_name:"",customer_phone:"",customer_address:"",delivery_fee:"0",discounts:"0",fees:"0",cancellations:"0",payment_method:"PIX",channel_id:data.channels.find(x=>x.name==="Direto")?.id||"",source:"manual",lines:[newPizza()]};
  const [form,setForm]=useState(blank);
@@ -154,10 +154,11 @@ function Vendas({data}){
  });
  function reset(){setEditing(null);setForm({...blank,channel_id:data.channels.find(x=>x.name==="Direto")?.id||"",lines:[newPizza()]});setOpen(true)}
  function editSale(x){
+   if(x.source!=="manual"){alert("Esta venda foi importada e não pode ser editada aqui. Para manter a importação íntegra, edições manuais ficam disponíveis somente para vendas diretas.");return}
    const items=x.sale_items||[];
    const lines=items.map(i=>{
      const p=products.find(p=>p.id===i.product_id)||products.find(p=>p.name===i.product_name);
-     if(i.item_type==="pizza")return {type:"pizza",product_id:p?.id||"",flavor_2_product_id:products.find(p=>p.id===i.flavor_2_product_id)?.id||"",size:i.size||"",border_product_id:products.find(p=>p.id===i.border_product_id)?.id||"",quantity:String(i.quantity||1)};
+     if(i.item_type==="pizza")return {type:"pizza",product_id:p?.id||"",flavor_2_product_id:products.find(p=>p.id===i.flavor_2_product_id)?.id||"",half:Boolean(i.flavor_2_product_id),size:i.size||"",border_product_id:products.find(p=>p.id===i.border_product_id)?.id||"",quantity:String(i.quantity||1)};
      return {type:"product",category:categoryName(p),product_id:p?.id||"",size:i.size||"",quantity:String(i.quantity||1)};
    });
    setEditing(x);setForm({fact_date:String(x.fact_date||"").slice(0,10)||today(),customer_name:x.customer_name||"",customer_phone:x.customer_phone||"",customer_address:x.customer_address||"",delivery_fee:String(x.delivery_fee||0),discounts:String(x.discounts||0),fees:String(x.fees||0),cancellations:String(x.cancellations||0),payment_method:x.payment_method||"PIX",channel_id:x.channel_id||"",source:"manual",lines:lines.length?lines:[newPizza()]});setOpen(true);
@@ -169,6 +170,7 @@ function Vendas({data}){
  async function save(e){
   e.preventDefault();
   if(form.lines.some(l=>!l.product_id))return alert("Selecione o produto de cada item.");
+  if(form.lines.some(l=>l.type==="pizza"&&l.half&&!l.flavor_2_product_id))return alert("Na pizza meio a meio, selecione o segundo sabor.");
   if(form.lines.some(l=>l.type==="pizza"&&!l.size))return alert("Selecione o tamanho de todas as pizzas.");
   if(form.lines.some(l=>l.type==="product"&&l.category==="Bordas Recheadas"&&!l.size))return alert("Selecione o tamanho de todas as bordas.");
   setSaving(true);
@@ -194,16 +196,16 @@ function Vendas({data}){
  }
  return <main className="content"><div className="page-head"><div><h2>Vendas</h2><p>Venda direta: vários itens no mesmo pedido, pizzas por tamanho, meia a meia, bordas, bebidas, taxa de entrega e pagamento.</p></div><button className="primary small" onClick={reset}><Plus size={16}/>Nova venda direta</button></div>
  <div className="filters"><label>Mês <input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></label><label>De <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}/></label><label>Até <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}/></label><select value={channel} onChange={e=>setChannel(e.target.value)}><option value="">Todos os canais</option>{data.channels.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select><select value={payment} onChange={e=>setPayment(e.target.value)}><option value="">Todos os pagamentos</option>{["PIX","Dinheiro","Cartão de crédito","Cartão de débito"].map(x=><option key={x}>{x}</option>)}</select><div className="search"><Search size={16}/><input placeholder="Pesquisar..." value={data.search} onChange={e=>data.setSearch(e.target.value)}/></div></div>
- <div className="table-wrap"><table><thead><tr><th>Data</th><th>Cliente</th><th>Canal</th><th>Pagamento</th><th>Bruta</th><th>Taxas/Descontos</th><th>Líquida</th><th>Ações</th></tr></thead><tbody>{rows.map(x=><tr key={x.id}><td>{new Date(x.fact_date).toLocaleDateString("pt-BR")}</td><td>{x.customer_name||"—"}</td><td>{x.channels?.name||"—"}</td><td>{x.payment_method||"—"}</td><td>{money(x.gross_amount)}</td><td>{money(Number(x.discounts||0)+Number(x.fees||0)+Number(x.cancellations||0))}</td><td><b>{money(x.net_amount)}</b></td><td><button className="icon-btn" title="Editar" onClick={()=>editSale(x)}>✏️</button><button className="icon-btn" title="Excluir" onClick={()=>removeSale(x)}>🗑️</button></td></tr>)}{!rows.length&&<EmptyRow text="Nenhuma venda encontrada."/>}</tbody></table></div>
+ <div className="table-wrap"><table><thead><tr><th>Data</th><th>Cliente</th><th>Canal</th><th>Pagamento</th><th>Bruta</th><th>Taxas/Descontos</th><th>Líquida</th><th>Ações</th></tr></thead><tbody>{rows.map(x=><tr key={x.id}><td>{new Date(x.fact_date).toLocaleDateString("pt-BR")}</td><td>{x.customer_name||"—"}</td><td>{x.channels?.name||"—"}</td><td>{x.payment_method||"—"}</td><td>{money(x.gross_amount)}</td><td>{money(Number(x.discounts||0)+Number(x.fees||0)+Number(x.cancellations||0))}</td><td><b>{money(x.net_amount)}</b></td><td><button className="icon-btn" title={x.source==="manual"?"Editar":"Venda importada — edição bloqueada"} disabled={x.source!=="manual"} onClick={()=>editSale(x)} style={x.source!=="manual"?{opacity:.45,cursor:"not-allowed"}:undefined}>✏️</button><button className="icon-btn" title="Excluir" onClick={()=>removeSale(x)}>🗑️</button></td></tr>)}{!rows.length&&<EmptyRow text="Nenhuma venda encontrada."/>}</tbody></table></div>
  {open&&<Modal title={editing?"Editar venda direta":"Nova venda direta"} onClose={()=>setOpen(false)}><form className="form-grid" onSubmit={save}>
  <Field label="Cliente"><input value={form.customer_name} onChange={e=>setForm({...form,customer_name:e.target.value})} placeholder="Nome do cliente"/></Field><Field label="Telefone"><input value={form.customer_phone} onChange={e=>setForm({...form,customer_phone:e.target.value})} placeholder="Telefone"/></Field><Field label="Endereço"><input value={form.customer_address} onChange={e=>setForm({...form,customer_address:e.target.value})} placeholder="Para entrega"/></Field><Field label="Data"><input type="date" value={form.fact_date} onChange={e=>setForm({...form,fact_date:e.target.value})} required/></Field>
  <div className="panel" style={{gridColumn:"1/-1"}}><div className="section-title"><h3>Itens da venda</h3><div><button type="button" className="ghost small" onClick={addPizza}>➕ Adicionar pizza</button><button type="button" className="ghost small" onClick={addProduct}>➕ Adicionar outro produto</button></div></div>
  {form.lines.map((line,i)=><div className="panel" key={i} style={{marginBottom:12,border:"1px solid #eee"}}>
   {line.type==="pizza"?<><div className="section-title"><h4>🍕 Pizza {i+1}</h4><button type="button" className="icon-btn" onClick={()=>removeLine(i)}>🗑️</button></div>
    <div className="form-grid"><Field label="Tamanho"><select required value={line.size} onChange={e=>updateLine(i,{size:e.target.value})}><option value="">Selecione</option><option value="P">Pequena</option><option value="M">Média</option><option value="G">Grande</option><option value="F">Família</option></select></Field>
-   <Field label="Tipo"><select value={line.flavor_2_product_id?"half":"whole"} onChange={e=>updateLine(i,{flavor_2_product_id:e.target.value==="half"?(line.flavor_2_product_id||""): ""})}><option value="whole">Pizza inteira</option><option value="half">Meio a meio</option></select></Field>
+   <Field label="Tipo"><select value={line.half?"half":"whole"} onChange={e=>updateLine(i,{half:e.target.value==="half"})}><option value="whole">Pizza inteira</option><option value="half">Meio a meio</option></select></Field>
    <Field label="1º sabor"><select required value={line.product_id} onChange={e=>updateLine(i,{product_id:e.target.value})}><option value="">Selecione</option>{pizzas.map(p=><option key={p.id} value={p.id}>{p.name} — {line.size?money(priceFor(p,line.size)):"selecione o tamanho"}</option>)}</select></Field>
-   {line.flavor_2_product_id&&<Field label="2º sabor"><select required value={line.flavor_2_product_id} onChange={e=>updateLine(i,{flavor_2_product_id:e.target.value})}><option value="">Selecione</option>{pizzas.filter(p=>p.id!==line.product_id).map(p=><option key={p.id} value={p.id}>{p.name} — {money(priceFor(p,line.size))}</option>)}</select></Field>}
+   {line.half&&<Field label="2º sabor"><select required value={line.flavor_2_product_id} onChange={e=>updateLine(i,{flavor_2_product_id:e.target.value})}><option value="">Selecione</option>{pizzas.filter(p=>p.id!==line.product_id).map(p=><option key={p.id} value={p.id}>{p.name} — {money(priceFor(p,line.size))}</option>)}</select></Field>}
    <Field label="Quantidade"><input type="number" min="1" step="1" value={line.quantity} onChange={e=>updateLine(i,{quantity:e.target.value})}/></Field>
    <Field label="Borda (opcional)"><select value={line.border_product_id} onChange={e=>updateLine(i,{border_product_id:e.target.value})}><option value="">Sem borda</option>{borders.map(p=><option key={p.id} value={p.id}>{p.name} — {line.size?money(priceFor(p,line.size)):"selecione o tamanho"}</option>)}</select></Field>
    <div style={{alignSelf:"end"}}><b>{line.size&&line.product_id?money(lineValue(line)):money(0)}</b></div></div>
