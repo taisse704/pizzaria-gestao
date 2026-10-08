@@ -33,16 +33,45 @@ async function seedUser(user){
 
   const menu = [
     {category:"Pizzas Tradicionais", items:[
-      ["A MODA",[45.99,55.99,65.99,80.99]],["CALABRESA",[44.99,54.99,64.99,79.99]],["FRANGO C/ CATUPIRY",[45.99,55.99,65.99,80.99]],["PORTUGUESA",[44.99,54.99,64.99,79.99]],["TOSCANA",[44.99,54.99,64.99,79.99]],["LOMBINHO",[44.99,54.99,64.99,79.99]],["4 QUEIJOS",[44.99,54.99,64.99,79.99]],["MARGUERITA",[44.99,54.99,64.99,79.99]],["VEGETARIANA",[44.99,54.99,64.99,79.99]]
+      ["A MODA","Frango, calabresa, presunto, catupiry, palmito, lombinho, azeitona e orégano.",[45.99,55.99,65.99,80.99]],
+      ["CALABRESA","Calabresa, cebola, azeitona e orégano.",[44.99,54.99,64.99,79.99]],
+      ["FRANGO C/ CATUPIRY","Frango, catupiry, azeitona e orégano.",[45.99,55.99,65.99,80.99]],
+      ["PORTUGUESA","Presunto, ovo, cebola, ervilha, azeitona e orégano.",[44.99,54.99,64.99,79.99]],
+      ["TOSCANA","Calabresa, bacon, ovo, cebola, azeitona e orégano.",[44.99,54.99,64.99,79.99]],
+      ["LOMBINHO","Lombresa, cebola, azeitona e orégano.",[44.99,54.99,64.99,79.99]],
+      ["4 QUEIJOS","Catupiry, provolone, gorgonzola, azeitona e orégano.",[44.99,54.99,64.99,79.99]],
+      ["MARGUERITA","Tomate, parmesão, manjericão, alho tostado, azeitona e orégano.",[44.99,54.99,64.99,79.99]],
+      ["VEGETARIANA","Tomate, milho, palmito, azeitona preta e orégano.",[44.99,54.99,64.99,79.99]]
     ]},
     {category:"Pizzas Especiais", items:[
-      ["FRANGO ESPECIAL",[45.99,55.99,65.99,80.99]],["CALABRESA ESPECIAL",[44.99,54.99,64.99,79.99]],["BACON ESPECIAL",[44.99,54.99,64.99,79.99]],["RAVENNA",[44.99,54.99,64.99,79.99]],["NÁPOLES",[44.99,54.99,64.99,79.99]],["4 CARNES",[45.99,55.99,65.99,80.99]],["LOMBINHO C/ CHEDDAR",[44.99,54.99,64.99,79.99]],["SAINTROPEZ",[44.99,54.99,64.99,79.99]],["PRESUNTO ESPECIAL",[44.99,54.99,64.99,79.99]],["VENEZA",[44.99,54.99,64.99,79.99]],["CATUPIRY ESPECIAL",[44.99,54.99,64.99,79.99]],["VEGETARIANA ESPECIAL",[44.99,54.99,64.99,79.99]]
+      ["FRANGO ESPECIAL","Frango, catupiry, milho, bacon, calabresa, cebola, azeitona e orégano.",[45.99,55.99,65.99,80.99]],
+      ["CALABRESA ESPECIAL","Calabresa, palmito, catupiry, cebola, azeitona e orégano.",[44.99,54.99,64.99,79.99]],
+      ["BACON ESPECIAL","Bacon, tomate, milho, calabresa, azeitona e orégano.",[44.99,54.99,64.99,79.99]],
+      ["RAVENNA","Tomate, calabresa, milho, catupiry, azeitona e orégano.",[44.99,54.99,64.99,79.99]],
+      ["NÁPOLES","Tomate, lombinho, cheddar, bacon, azeitona e orégano.",[44.99,54.99,64.99,79.99]],
+      ["4 CARNES","Bacon, calabresa, presunto, lombinho, azeitona e orégano.",[45.99,55.99,65.99,80.99]],
+      ["LOMBINHO C/ CHEDDAR","Molho da casa, mussarela, lombinho, cheddar, azeitona e orégano.",[44.99,54.99,64.99,79.99]],
+      ["SAINTROPEZ","Catupiry, palmito, lombinho, parmesão, azeitona e orégano.",[44.99,54.99,64.99,79.99]],
+      ["PRESUNTO ESPECIAL","Presunto, bacon, milho, tomate, azeitona e orégano.",[44.99,54.99,64.99,79.99]],
+      ["VENEZA","Tomate, provolone, bacon, alho tostado, azeitona e orégano.",[44.99,54.99,64.99,79.99]],
+      ["CATUPIRY ESPECIAL","Catupiry, milho, tomate, azeitona e orégano.",[44.99,54.99,64.99,79.99]],
+      ["VEGETARIANA ESPECIAL","Tomate, milho, palmito, ervilha, manjericão, azeitona e orégano.",[44.99,54.99,64.99,79.99]]
     ]},
     {category:"Bebidas", items:[
-      ["REFRIGERANTE 1 L - COCA COLA",[10]],["REFRIGERANTE 1,5 L - GUARANÁ MINEIRO",[9]],["REFRIGERANTE 1,5 L - GUARANÁ MINEIRO ZERO",[9]],["REFRIGERANTE 2 L - COCA COLA",[16]],["REFRIGERANTE 2 L - GUARANÁ MINEIRO",[11]],["REFRIGERANTE MINEIRO 600ml",[7]],["REFRIGERANTE MINEIRO 350ml (LATA)",[5]]
+      ["REFRIGERANTE 1 L - COCA COLA","Coca Cola.",[10]],
+      ["REFRIGERANTE 1,5 L - GUARANÁ MINEIRO","Guaraná Mineiro.",[9]],
+      ["REFRIGERANTE 1,5 L - GUARANÁ MINEIRO ZERO","Guaraná Mineiro Zero.",[9]],
+      ["REFRIGERANTE 2 L - COCA COLA","Coca Cola.",[16]],
+      ["REFRIGERANTE 2 L - GUARANÁ MINEIRO","Guaraná Mineiro.",[11]],
+      ["REFRIGERANTE MINEIRO 600ml","Refrigerante Mineiro 600ml.",[7]],
+      ["REFRIGERANTE MINEIRO 350ml (LATA)","Refrigerante Mineiro 350ml em lata.",[5]]
     ]},
     {category:"Bordas Recheadas", items:[
-      ["CATUPIRY - P",[12]],["CATUPIRY - M",[12]],["CATUPIRY - G",[12]],["CATUPIRY - F",[14]],["CHEDDAR - P",[12]],["CHEDDAR - M",[12]],["CHEDDAR - G",[12]],["CHEDDAR - F",[14]],["CATUPIRY C/ BACON - P",[14]],["CATUPIRY C/ BACON - M",[14]],["CATUPIRY C/ BACON - G",[14]],["CATUPIRY C/ BACON - F",[16]],["CHEDDAR C/ BACON - P",[14]],["CHEDDAR C/ BACON - M",[14]],["CHEDDAR C/ BACON - G",[14]],["CHEDDAR C/ BACON - F",[16]],["PRESUNTO C/ MUSSARELA - P",[16]],["PRESUNTO C/ MUSSARELA - M",[16]],["PRESUNTO C/ MUSSARELA - G",[16]],["PRESUNTO C/ MUSSARELA - F",[18]]
+      ["CATUPIRY","Catupiry.",[12,12,12,14]],
+      ["CHEDDAR","Cheddar.",[12,12,12,14]],
+      ["CATUPIRY C/ BACON","Catupiry com bacon.",[14,14,14,16]],
+      ["CHEDDAR C/ BACON","Cheddar com bacon.",[14,14,14,16]],
+      ["PRESUNTO C/ MUSSARELA","Presunto com mussarela.",[16,16,16,18]]
     ]}
   ];
   for(const group of menu){
@@ -53,11 +82,13 @@ async function seedUser(user){
       categoryId=created?.id;
     }
     if(!categoryId) continue;
-    const names=group.items.map(x=>x[0]);
-    const {data:existingProducts}=await supabase.from("products").select("name").eq("user_id",user.id).in("name",names);
-    const existingNames=new Set((existingProducts||[]).map(x=>x.name));
-    const missing=group.items.filter(x=>!existingNames.has(x[0])).map(([name,prices])=>({user_id:user.id,name,category_id:categoryId,sale_price:Number(prices[0]||0),cost_price:0,active:true}));
-    if(missing.length) await supabase.from("products").insert(missing);
+    for(const [name,description,prices] of group.items){
+      const p=prices||[];
+      const payload={category_id:categoryId,description,price_p:p[0]??null,price_m:p[1]??null,price_g:p[2]??null,price_f:p[3]??null,sale_price:Number(p[0]??p[1]??p[2]??p[3]??0),active:true,cost_price:0};
+      const {data:existing}=await supabase.from("products").select("id").eq("user_id",user.id).eq("name",name).limit(1);
+      if(existing?.[0]) await supabase.from("products").update(payload).eq("id",existing[0].id).eq("user_id",user.id);
+      else await supabase.from("products").insert({...payload,user_id:user.id,name});
+    }
   }
 }
 
@@ -201,23 +232,30 @@ function Despesas({data}){
 }
 
 function Cardapio({data}){
- const [open,setOpen]=useState(false),[editing,setEditing]=useState(null),[form,setForm]=useState({name:"",category_id:"",sale_price:"",cost_price:""});
+ const [open,setOpen]=useState(false),[editing,setEditing]=useState(null);
+ const [form,setForm]=useState({name:"",description:"",category_id:"",sale_price:"",price_p:"",price_m:"",price_g:"",price_f:"",cost_price:""});
  const rows=(data.products||[]).filter(x=>x.active!==false);
  const grouped=rows.reduce((acc,x)=>{const key=x.categories?.name||"Sem categoria";(acc[key]??=[]).push(x);return acc},{}); 
- function startNew(){setEditing(null);setForm({name:"",category_id:"",sale_price:"",cost_price:""});setOpen(true)}
- function startEdit(x){setEditing(x);setForm({name:x.name,category_id:x.category_id||"",sale_price:String(x.sale_price??""),cost_price:String(x.cost_price??"")});setOpen(true)}
- async function save(e){e.preventDefault();const payload={name:form.name.trim(),category_id:form.category_id||null,sale_price:Number(form.sale_price||0),cost_price:Number(form.cost_price||0),active:true};
+ const isSized=form.category_id&&data.categories.some(c=>c.id===form.category_id&&["Pizzas Tradicionais","Pizzas Especiais","Bordas Recheadas"].includes(c.name));
+ function startNew(){setEditing(null);setForm({name:"",description:"",category_id:"",sale_price:"",price_p:"",price_m:"",price_g:"",price_f:"",cost_price:""});setOpen(true)}
+ function startEdit(x){setEditing(x);setForm({name:x.name||"",description:x.description||"",category_id:x.category_id||"",sale_price:String(x.sale_price??""),price_p:String(x.price_p??""),price_m:String(x.price_m??""),price_g:String(x.price_g??""),price_f:String(x.price_f??""),cost_price:String(x.cost_price??"")});setOpen(true)}
+ async function save(e){e.preventDefault();const p=form.category_id&&data.categories.find(c=>c.id===form.category_id)?.name;const sized=["Pizzas Tradicionais","Pizzas Especiais","Bordas Recheadas"].includes(p);const primary=sized?(form.price_p||form.price_m||form.price_g||form.price_f):form.sale_price;const payload={name:form.name.trim(),description:form.description.trim(),category_id:form.category_id||null,sale_price:Number(primary||0),price_p:sized&&form.price_p!==""?Number(form.price_p):null,price_m:sized&&form.price_m!==""?Number(form.price_m):null,price_g:sized&&form.price_g!==""?Number(form.price_g):null,price_f:sized&&form.price_f!==""?Number(form.price_f):null,cost_price:Number(form.cost_price||0),active:true};
    const q=editing?supabase.from("products").update(payload).eq("id",editing.id).eq("user_id",data.user.id):supabase.from("products").insert({...payload,user_id:data.user.id});
    const {error}=await q;if(error)alert(error.message);else{setOpen(false);data.reload()}
  }
- async function remove(x){if(!confirm("Excluir este item do cardápio? Ele será retirado da seleção de novas vendas, preservando o histórico."))return;const {error}=await supabase.from("products").update({active:false}).eq("id",x.id).eq("user_id",data.user.id);if(error)alert(error.message);else data.reload()}
- return <main className="content"><div className="page-head"><div><h2>Cardápio</h2><p>Produtos separados por tópico, prontos para seleção nas vendas manuais.</p></div><button className="primary small" onClick={startNew}><Plus size={16}/>Novo item</button></div>
+ async function remove(x){if(!confirm("Excluir este item do cardápio? Ele será desativado para não apagar o histórico de vendas."))return;const {error}=await supabase.from("products").update({active:false}).eq("id",x.id).eq("user_id",data.user.id);if(error)alert(error.message);else data.reload()}
+ return <main className="content"><div className="page-head"><div><h2>Cardápio</h2><p>Cardápio completo com descrição, tamanhos, preços e edição.</p></div><button className="primary small" onClick={startNew}><Plus size={16}/>Incluir item</button></div>
  <div className="filters"><div className="search"><Search size={16}/><input placeholder="Pesquisar produto..." value={data.search} onChange={e=>data.setSearch(e.target.value)}/></div></div>
- {Object.entries(grouped).map(([category,items])=><section className="panel" key={category}><div className="section-title"><h3>{category}</h3><span>{items.length} item(ns)</span></div><div className="table-wrap"><table><thead><tr><th>Produto</th><th>Venda</th><th>Custo</th><th>Margem</th><th>Ações</th></tr></thead><tbody>{items.map(x=>{const margin=Number(x.sale_price||0)-Number(x.cost_price||0);return <tr key={x.id}><td>{x.name}</td><td>{money(x.sale_price)}</td><td>{money(x.cost_price)}</td><td>{money(margin)}</td><td><button className="icon-btn" title="Editar" onClick={()=>startEdit(x)}>✏️</button><button className="icon-btn" title="Excluir" onClick={()=>remove(x)}>🗑️</button></td></tr>})}</tbody></table></div></section>)}
+ {Object.entries(grouped).map(([category,items])=><section className="panel" key={category}><div className="section-title"><h3>{category}</h3><span>{items.length} item(ns)</span></div><div className="table-wrap"><table><thead><tr><th>Produto</th><th>Descrição</th><th>P</th><th>M</th><th>G</th><th>F</th><th>Custo</th><th>Ações</th></tr></thead><tbody>{items.map(x=><tr key={x.id}><td><b>{x.name}</b></td><td>{x.description||"—"}</td><td>{x.price_p!=null?money(x.price_p):money(x.sale_price)}</td><td>{x.price_m!=null?money(x.price_m):"—"}</td><td>{x.price_g!=null?money(x.price_g):"—"}</td><td>{x.price_f!=null?money(x.price_f):"—"}</td><td>{money(x.cost_price)}</td><td><button className="icon-btn" title="Editar" onClick={()=>startEdit(x)}>✏️</button><button className="icon-btn" title="Excluir" onClick={()=>remove(x)}>🗑️</button></td></tr>)}</tbody></table></div></section>)}
  {!rows.length&&<section className="panel"><div className="empty-row">Nenhum item no cardápio.</div></section>}
- {open&&<Modal title={editing?"Editar item do cardápio":"Novo item do cardápio"} onClose={()=>setOpen(false)}><form className="form-grid" onSubmit={save}><Field label="Nome"><input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></Field><Field label="Categoria"><select value={form.category_id} onChange={e=>setForm({...form,category_id:e.target.value})}><option value="">Selecione</option>{data.categories.filter(x=>["Pizzas Tradicionais","Pizzas Especiais","Bebidas","Bordas Recheadas"].includes(x.name)).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></Field><Field label="Preço de venda"><input type="number" step="0.01" value={form.sale_price} onChange={e=>setForm({...form,sale_price:e.target.value})}/></Field><Field label="Custo"><input type="number" step="0.01" value={form.cost_price} onChange={e=>setForm({...form,cost_price:e.target.value})}/></Field><div className="form-actions"><button className="primary">{editing?"Salvar alterações":"Salvar item"}</button></div></form></Modal>}</main>
+ {open&&<Modal title={editing?"Editar item do cardápio":"Incluir item no cardápio"} onClose={()=>setOpen(false)}><form className="form-grid" onSubmit={save}>
+ <Field label="Nome"><input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></Field>
+ <Field label="Categoria"><select required value={form.category_id} onChange={e=>setForm({...form,category_id:e.target.value})}><option value="">Selecione</option>{data.categories.filter(x=>["Pizzas Tradicionais","Pizzas Especiais","Bebidas","Bordas Recheadas"].includes(x.name)).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>
+ <Field label="Descrição"><textarea rows="3" value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/></Field>
+ {isSized?<><Field label="Preço P"><input type="number" step="0.01" value={form.price_p} onChange={e=>setForm({...form,price_p:e.target.value})}/></Field><Field label="Preço M"><input type="number" step="0.01" value={form.price_m} onChange={e=>setForm({...form,price_m:e.target.value})}/></Field><Field label="Preço G"><input type="number" step="0.01" value={form.price_g} onChange={e=>setForm({...form,price_g:e.target.value})}/></Field><Field label="Preço F"><input type="number" step="0.01" value={form.price_f} onChange={e=>setForm({...form,price_f:e.target.value})}/></Field></>:<Field label="Preço de venda"><input type="number" step="0.01" value={form.sale_price} onChange={e=>setForm({...form,sale_price:e.target.value})}/></Field>}
+ <Field label="Custo"><input type="number" step="0.01" value={form.cost_price} onChange={e=>setForm({...form,cost_price:e.target.value})}/></Field>
+ <div className="form-actions"><button className="primary">{editing?"Salvar alterações":"Incluir item"}</button></div></form></Modal>}</main>
 }
-
 function Conciliacao({data}){
  const pending=(data.bankTx||[]).filter(x=>x.status!=="reconciled");
  async function reconcile(tx,targetType,targetId,amount){const {error:e1}=await supabase.from("reconciliation_links").insert({user_id:data.user.id,bank_transaction_id:tx.id,target_type:targetType,target_id:targetId,matched_amount:amount});if(e1){alert(e1.message);return}const {error:e2}=await supabase.from("bank_transactions").update({status:"reconciled"}).eq("id",tx.id);if(e2)alert(e2.message);else data.reload()}
@@ -230,7 +268,7 @@ function parseMoney(v){if(typeof v==="number")return v;let s=String(v??"").repla
 function parseExcelDate(v){if(v instanceof Date&&!Number.isNaN(v.getTime()))return v.toISOString().slice(0,10);if(typeof v==="number"){const d=new Date(Math.round((v-25569)*86400*1000));return Number.isNaN(d.getTime())?today():d.toISOString().slice(0,10)}const s=String(v??"").trim();if(!s)return today();const parts=s.split("/");if(parts.length===3&&parts[0].length<=2&&parts[1].length<=2&&parts[2].length===4){const [d,m,y]=parts;return y+"-"+m.padStart(2,"0")+"-"+d.padStart(2,"0")}if(s.length>=10&&s[4]==="-"&&s[7]==="-")return s.slice(0,10);const d=new Date(s);return Number.isNaN(d.getTime())?today():d.toISOString().slice(0,10)}
 function headerIndex(headers,...names){const normalized=headers.map(normalizeHeader);for(const name of names){const i=normalized.indexOf(normalizeHeader(name));if(i>=0)return i}for(const name of names){const n=normalizeHeader(name);const i=normalized.findIndex(h=>h.includes(n)||n.includes(h));if(i>=0)return i}return -1}
 function detectSource(headers){const h=headers.map(normalizeHeader).join(" ");if((h.includes("id completo do pedido")||h.includes("valor liquido")||h.includes("total pago pelo cliente"))&&h.includes("ifood"))return "ifood";if((h.includes("ref ifood")||h.includes("situacao delivery")||h.includes("valor pago"))&&h.includes("numero pedido"))return "beefood";if(h.includes("id da transacao")||h.includes("nome do titular")||h.includes("bandeira")||h.includes("metodo de captura"))return "cartao";if(h.includes("movimentacao")||h.includes("saldo antes")||h.includes("nosso numero"))return "banco_ton";if(h.includes("data da transacao")||h.includes("categoria"))return "banco_ifood";return "banco_ifood"}
-async function parseWorkbook(file){const XLSX=await import("xlsx");const buf=await file.arrayBuffer();const wb=XLSX.read(buf,{type:"array",cellDates:true});const ws=wb.Sheets[wb.SheetNames[0]];return XLSX.utils.sheet_to_json(ws,{header:1,defval:""})}
+async function parseWorkbook(file){const XLSX=await import("xlsx");const buf=await file.arrayBuffer();const wb=XLSX.read(buf,{type:"array",cellDates:true,cellNF:true,cellText:true,raw:false});const ws=wb.Sheets[wb.SheetNames[0]];return XLSX.utils.sheet_to_json(ws,{header:1,defval:""})}
 function Dados({data}){
  const [source,setSource]=useState("ifood"),[preview,setPreview]=useState([]),[file,setFile]=useState(null),[busy,setBusy]=useState(false),[message,setMessage]=useState(""),[sheetSource,setSheetSource]=useState("");
  async function onFile(e){const f=e.target.files?.[0];if(!f)return;setFile(f);setMessage("");try{const rows=await parseWorkbook(f);const clean=rows.filter(r=>Array.isArray(r)&&r.some(v=>String(v??"").trim()!=="")).slice(0,101);setPreview(clean);const detected=detectSource(clean[0]||[]);setSheetSource(detected);if(source==="auto")setSource(detected)}catch(error){setPreview([]);setMessage("Não foi possível ler o Excel: "+(error?.message||"arquivo inválido."))}}
