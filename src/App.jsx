@@ -346,6 +346,7 @@ function Conciliacao({data}){
  const adjustmentValue=Number(adjustments||0);
  const expectedNet=salesNet-feeValue+adjustmentValue;
  const difference=tx?Number(tx.amount||0)-expectedNet:0;
+ const saleRows=availableSales.map(s=>{const checked=selectedSales.includes(s.id);return <tr key={s.id}><td><input type="checkbox" checked={checked} onChange={()=>toggleSale(s.id)}/></td><td>{dateBR(String(s.fact_date||"").slice(0,10))}</td><td>{s.channels?.name||data.channels.find(c=>c.id===s.channel_id)?.name||"—"}</td><td>{s.external_id||"Venda"}{s.payment_method?" • "+s.payment_method:""}</td><td>{money(s.gross_amount)}</td><td>{money(Number(s.fees||0)+Number(s.discounts||0))}</td><td>{money(s.net_amount)}</td></tr>});
  function toggleSale(id){setSelectedSales(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id])}
  function clearSelection(){setSelectedSales([]);setSelectedTx("");setFees("0");setAdjustments("0")}
  function chooseTx(x){
@@ -408,7 +409,7 @@ function Conciliacao({data}){
     <div><b>{money(expectedNet)}</b><span>valor esperado</span></div>
     <div><b>{money(difference)}</b><span>diferença banco × esperado</span></div>
    </div>
-   <div className="table-wrap" style={{marginTop:16}}><table><thead><tr><th></th><th>Data</th><th>Canal</th><th>Descrição</th><th>Bruto</th><th>Taxas</th><th>Líquido</th></tr></thead><tbody>{availableSales.map(s=>{const checked=selectedSales.includes(s.id);return <tr key={s.id}><td><input type="checkbox" checked={checked} onChange={()=>toggleSale(s.id)}/></td><td>{dateBR(String(s.fact_date||"").slice(0,10))}</td><td>{s.channels?.name||data.channels.find(c=>c.id===s.channel_id)?.name||"—"}</td><td>{s.external_id||"Venda"}{s.payment_method?" • "+s.payment_method:""}</td><td>{money(s.gross_amount)}</td><td>{money(s.fees+s.discounts)}</td><td>{money(s.net_amount)}</td></tr>)}{!availableSales.length&&<EmptyRow text="Nenhuma venda de plataforma disponível para vincular."/>}</tbody></table></div>
+   <div className="table-wrap" style={{marginTop:16}}><table><thead><tr><th></th><th>Data</th><th>Canal</th><th>Descrição</th><th>Bruto</th><th>Taxas</th><th>Líquido</th></tr></thead><tbody>{saleRows}{!availableSales.length&&<EmptyRow text="Nenhuma venda de plataforma disponível para vincular."/>}</tbody></table></div>
    <div className="actions" style={{marginTop:16}}><button className="primary" disabled={saving||!selected.length||!tx} onClick={createBatch}>{saving?"Conciliando...":"Conciliar repasse"}</button><button className="ghost" onClick={clearSelection}>Limpar</button></div>
    {tx&&<p className={Math.abs(difference)<=0.01?"success":"error"} style={{marginTop:12}}>{Math.abs(difference)<=0.01?"Fechamento conferido: o valor do banco bate com o esperado.":"Atenção: o banco e as vendas selecionadas têm uma diferença de "+money(difference)+"."}</p>}
   </section>
