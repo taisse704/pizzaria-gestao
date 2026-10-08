@@ -87,29 +87,57 @@ function Dashboard({data}){
 }
 
 function Vendas({data}){
- const [open,setOpen]=useState(false),[saving,setSaving]=useState(false),[form,setForm]=useState({fact_date:today(),competence_date:today(),product_id:"",quantity:"1",delivery_fee:"0",discounts:"0",fees:"0",cancellations:"0",payment_method:"PIX",source:"manual",channel_id:""});
+ const [open,setOpen]=useState(false),[editing,setEditing]=useState(null),[saving,setSaving]=useState(false);
+ const [dateFrom,setDateFrom]=useState(""),[dateTo,setDateTo]=useState("");
+ const [form,setForm]=useState({fact_date:today(),competence_date:today(),product_id:"",quantity:"1",delivery_fee:"0",discounts:"0",fees:"0",cancellations:"0",payment_method:"PIX",source:"manual",channel_id:""});
  const product=data.products.find(p=>p.id===form.product_id);
  const itemTotal=product?Number(product.sale_price||0)*Math.max(1,Number(form.quantity||1)):0;
  const gross=itemTotal+Number(form.delivery_fee||0),net=gross-Number(form.discounts||0)-Number(form.fees||0)-Number(form.cancellations||0);
- async function save(e){e.preventDefault();setSaving(true);try{const {data:sale,error}=await supabase.from("sales").insert({user_id:data.user.id,channel_id:form.channel_id||null,fact_date:new Date(form.fact_date+"T12:00:00").toISOString(),competence_date:form.competence_date,payment_method:form.payment_method,source:form.source,gross_amount:gross,delivery_fee:Number(form.delivery_fee||0),discounts:Number(form.discounts||0),fees:Number(form.fees||0),cancellations:Number(form.cancellations||0),net_amount:net}).select("id").single();if(error)throw error;
- if(product&&sale){const qty=Math.max(1,Number(form.quantity||1));const {error:itemError}=await supabase.from("sale_items").insert({sale_id:sale.id,product_name:product.name,quantity:qty,unit_price:Number(product.sale_price||0),total_amount:itemTotal});if(itemError)throw itemError}
- if(sale){const {error:e2}=await supabase.from("receivables").insert({user_id:data.user.id,sale_id:sale.id,description:`Venda ${form.payment_method||""}`.trim(),competence_date:form.competence_date,expected_date:form.competence_date,amount:net,received_amount:0,status:"pending",source:form.source||"manual"});if(e2)throw e2}
- setOpen(false);data.reload();}catch(error){alert(error?.message||"Não foi possível salvar a venda.")}finally{setSaving(false)}}
- return <main className="content"><div className="page-head"><div><h2>Vendas</h2><p>Registre a venda manual com produto, taxa de entrega e meio de recebimento.</p></div><button className="primary small" onClick={()=>setOpen(true)}><Plus size={16}/>Nova venda</button></div>
- <TableToolbar search={data.search} setSearch={data.setSearch} exportData={()=>downloadCSV(data.sales,"vendas.csv")}/>
- <div className="table-wrap"><table><thead><tr><th>Fato gerador</th><th>Competência</th><th>Produto vendido</th><th>Canal</th><th>Meio de recebimento</th><th>Entrega</th><th>Bruta</th><th>Taxas/descontos</th><th>Líquida</th></tr></thead><tbody>{data.sales.map(x=><tr key={x.id}><td>{new Date(x.fact_date).toLocaleDateString("pt-BR")}</td><td>{dateBR(x.competence_date)}</td><td>{x.sale_items?.[0]?.product_name||"—"}</td><td>{x.channels?.name||"—"}</td><td>{x.payment_method||"—"}</td><td>{money(x.delivery_fee)}</td><td>{money(x.gross_amount)}</td><td>{money(Number(x.discounts)+Number(x.fees)+Number(x.cancellations))}</td><td><b>{money(x.net_amount)}</b></td></tr>)}{!data.sales.length&&<EmptyRow text="Nenhuma venda registrada."/>}</tbody></table></div>
- {open&&<Modal title="Nova venda manual" onClose={()=>setOpen(false)}><form className="form-grid" onSubmit={save}>
- <Field label="Data da venda"><input type="date" value={form.fact_date} onChange={e=>setForm({...form,fact_date:e.target.value})}/></Field><Field label="Competência"><input type="date" value={form.competence_date} onChange={e=>setForm({...form,competence_date:e.target.value})}/></Field>
- <Field label="Produto vendido"><select value={form.product_id} onChange={e=>setForm({...form,product_id:e.target.value})}><option value="">Selecione no Cardápio</option>{data.products.map(x=><option key={x.id} value={x.id}>{x.name} — {money(x.sale_price)}</option>)}</select></Field>
- <Field label="Quantidade"><input type="number" min="1" step="1" value={form.quantity} onChange={e=>setForm({...form,quantity:e.target.value})}/></Field>
+ const rows=(data.sales||[]).filter(x=>{const d=String(x.fact_date||"").slice(0,10);return (!dateFrom||d>=dateFrom)&&(!dateTo||d<=dateTo)});
+ function reset(){setEditing(null);setForm({fact_date:today(),competence_date:today(),product_id:"",quantity:"1",delivery_fee:"0",discounts:"0",fees:"0",cancellations:"0",payment_method:"PIX",source:"manual",channel_id:""});setOpen(true)}
+ function editSale(x){
+   const item=x.sale_items?.[0];
+   const p=item?data.products.find(p=>p.name===item.product_name):null;
+   setEditing(x);
+   setForm({fact_date:String(x.fact_date||"").slice(0,10)||today(),competence_date:x.competence_date||today(),product_id:p?.id||"",quantity:String(item?.quantity||1),delivery_fee:String(x.delivery_fee||0),discounts:String(x.discounts||0),fees:String(x.fees||0),cancellations:String(x.cancellations||0),payment_method:x.payment_method||"PIX",source:x.source||"manual",channel_id:x.channel_id||""});
+   setOpen(true);
+ }
+ async function save(e){
+   e.preventDefault();setSaving(true);
+   try{
+     const payload={channel_id:form.channel_id||null,fact_date:new Date(form.fact_date+"T12:00:00").toISOString(),competence_date:form.competence_date,payment_method:form.payment_method,source:form.source,gross_amount:gross,delivery_fee:Number(form.delivery_fee||0),discounts:Number(form.discounts||0),fees:Number(form.fees||0),cancellations:Number(form.cancellations||0),net_amount:net};
+     let saleId=editing?.id;
+     if(editing){const {error}=await supabase.from("sales").update(payload).eq("id",editing.id).eq("user_id",data.user.id);if(error)throw error;
+       await supabase.from("sale_items").delete().eq("sale_id",editing.id);
+     }else{const {data:sale,error}=await supabase.from("sales").insert({...payload,user_id:data.user.id}).select("id").single();if(error)throw error;saleId=sale.id}
+     if(form.source==="manual"&&product&&saleId){const qty=Math.max(1,Number(form.quantity||1));const {error}=await supabase.from("sale_items").insert({sale_id:saleId,product_name:product.name,quantity:qty,unit_price:Number(product.sale_price||0),total_amount:itemTotal});if(error)throw error}
+     const {data:recv}=await supabase.from("receivables").select("id").eq("sale_id",saleId).limit(1);
+     if(recv?.[0]){const {error}=await supabase.from("receivables").update({description:`Venda ${form.payment_method||""}`.trim(),competence_date:form.competence_date,expected_date:form.competence_date,amount:net}).eq("id",recv[0].id);if(error)throw error}
+     else if(form.source==="manual"){const {error}=await supabase.from("receivables").insert({user_id:data.user.id,sale_id:saleId,description:`Venda ${form.payment_method||""}`.trim(),competence_date:form.competence_date,expected_date:form.competence_date,amount:net,received_amount:0,status:"pending",source:"manual"});if(error)throw error}
+     setOpen(false);data.reload();
+   }catch(error){alert(error?.message||"Não foi possível salvar a venda.")}finally{setSaving(false)}
+ }
+ async function removeSale(x){
+   if(!confirm("Excluir esta venda? O lançamento e o recebimento vinculado serão removidos."))return;
+   try{
+     await supabase.from("receivables").delete().eq("sale_id",x.id);
+     await supabase.from("sale_items").delete().eq("sale_id",x.id);
+     const {error}=await supabase.from("sales").delete().eq("id",x.id).eq("user_id",data.user.id);if(error)throw error;
+     data.reload();
+   }catch(error){alert(error?.message||"Não foi possível excluir a venda.")}
+ }
+ return <main className="content"><div className="page-head"><div><h2>Vendas</h2><p>Todos os registros aparecem pela data da ocorrência do fato, inclusive os importados.</p></div><button className="primary small" onClick={reset}><Plus size={16}/>Nova venda</button></div>
+ <div className="filters"><div className="search"><Search size={16}/><input placeholder="Pesquisar produto, canal, pagamento..." value={data.search} onChange={e=>data.setSearch(e.target.value)}/></div><label>De <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}/></label><label>Até <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}/></label><button className="ghost" onClick={()=>downloadCSV(rows,"vendas.csv")}><Download size={16}/>CSV</button></div>
+ <div className="table-wrap"><table><thead><tr><th>Data do fato</th><th>Competência</th><th>Produto vendido</th><th>Canal</th><th>Recebimento</th><th>Entrega</th><th>Bruta</th><th>Descontos/Taxas</th><th>Líquida</th><th>Origem</th><th>Ações</th></tr></thead><tbody>{rows.map(x=><tr key={x.id}><td>{new Date(x.fact_date).toLocaleDateString("pt-BR")}</td><td>{dateBR(x.competence_date)}</td><td>{x.sale_items?.[0]?.product_name||"Importado — sem produto informado"}</td><td>{x.channels?.name||"—"}</td><td>{x.payment_method||"—"}</td><td>{money(x.delivery_fee)}</td><td>{money(x.gross_amount)}</td><td>{money(Number(x.discounts||0)+Number(x.fees||0)+Number(x.cancellations||0))}</td><td><b>{money(x.net_amount)}</b></td><td>{x.source==="manual"?"Manual":String(x.source||"Importado")}</td><td><button className="icon-btn" title="Editar" onClick={()=>editSale(x)}>✏️</button><button className="icon-btn" title="Excluir" onClick={()=>removeSale(x)}>🗑️</button></td></tr>)}{!rows.length&&<EmptyRow text="Nenhuma venda encontrada."/>}</tbody></table></div>
+ {open&&<Modal title={editing?"Editar venda":"Nova venda manual"} onClose={()=>setOpen(false)}><form className="form-grid" onSubmit={save}>
+ <Field label="Data da ocorrência"><input type="date" value={form.fact_date} onChange={e=>setForm({...form,fact_date:e.target.value})}/></Field><Field label="Competência"><input type="date" value={form.competence_date} onChange={e=>setForm({...form,competence_date:e.target.value})}/></Field>
+ {form.source==="manual"&&<><Field label="Produto vendido"><select value={form.product_id} onChange={e=>setForm({...form,product_id:e.target.value})}><option value="">Selecione no Cardápio</option>{data.products.map(x=><option key={x.id} value={x.id}>{x.categories?.name?x.categories.name+" — ":""}{x.name} — {money(x.sale_price)}</option>)}</select></Field><Field label="Quantidade"><input type="number" min="1" step="1" value={form.quantity} onChange={e=>setForm({...form,quantity:e.target.value})}/></Field></>}
  <Field label="Canal"><select value={form.channel_id} onChange={e=>setForm({...form,channel_id:e.target.value})}><option value="">Selecione</option>{data.channels.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>
  <Field label="Meio de recebimento"><select value={form.payment_method} onChange={e=>setForm({...form,payment_method:e.target.value})}><option>PIX</option><option>Dinheiro</option><option>Cartão de crédito</option><option>Cartão de débito</option><option>iFood</option><option>BeeFood</option><option>99Food</option><option>Outro</option></select></Field>
- <Field label="Taxa de entrega"><input type="number" step="0.01" value={form.delivery_fee} onChange={e=>setForm({...form,delivery_fee:e.target.value})}/></Field>
- <Field label="Descontos"><input type="number" step="0.01" value={form.discounts} onChange={e=>setForm({...form,discounts:e.target.value})}/></Field><Field label="Taxas"><input type="number" step="0.01" value={form.fees} onChange={e=>setForm({...form,fees:e.target.value})}/></Field><Field label="Cancelamentos"><input type="number" step="0.01" value={form.cancellations} onChange={e=>setForm({...form,cancellations:e.target.value})}/></Field>
+ <Field label="Taxa de entrega"><input type="number" step="0.01" value={form.delivery_fee} onChange={e=>setForm({...form,delivery_fee:e.target.value})}/></Field><Field label="Descontos"><input type="number" step="0.01" value={form.discounts} onChange={e=>setForm({...form,discounts:e.target.value})}/></Field><Field label="Taxas"><input type="number" step="0.01" value={form.fees} onChange={e=>setForm({...form,fees:e.target.value})}/></Field><Field label="Cancelamentos"><input type="number" step="0.01" value={form.cancellations} onChange={e=>setForm({...form,cancellations:e.target.value})}/></Field>
  <div className="panel" style={{gridColumn:"1/-1"}}><b>Resumo:</b> Produto {money(itemTotal)} + entrega {money(form.delivery_fee)} = <b>{money(gross)}</b> • líquido {money(net)}</div>
- <div className="form-actions"><button className="primary" disabled={saving}>{saving?"Salvando...":"Salvar venda"}</button></div></form></Modal>}</main>
+ <div className="form-actions"><button className="primary" disabled={saving}>{saving?"Salvando...":editing?"Salvar alterações":"Salvar venda"}</button></div></form></Modal>}</main>
 }
-
 function Bancos({data}){
  const [open,setOpen]=useState(false),[form,setForm]=useState({fact_date:today(),competence_date:today(),description:"",classification:"Despesas",amount:"",direction:"out",bank_account_id:""});
  async function save(e){e.preventDefault();const {error}=await supabase.from("bank_transactions").insert({...form,user_id:data.user.id,amount:Number(form.amount),status:"unreconciled"});if(error)alert(error.message);else{setOpen(false);data.reload()}}
