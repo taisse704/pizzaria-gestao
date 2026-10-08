@@ -30,6 +30,35 @@ async function seedUser(user){
   if(!banks?.length) await supabase.from("bank_accounts").insert(defaults.map(x=>({...x,user_id:user.id})));
   if(!existingCats?.length) await supabase.from("categories").insert(cats.map(([name,classification])=>({user_id:user.id,name,classification})));
   if(!existingChans?.length) await supabase.from("channels").insert(chans.map(name=>({user_id:user.id,name})));
+
+  const menu = [
+    {category:"Pizzas Tradicionais", items:[
+      ["A MODA",[45.99,55.99,65.99,80.99]],["CALABRESA",[44.99,54.99,64.99,79.99]],["FRANGO C/ CATUPIRY",[45.99,55.99,65.99,80.99]],["PORTUGUESA",[44.99,54.99,64.99,79.99]],["TOSCANA",[44.99,54.99,64.99,79.99]],["LOMBINHO",[44.99,54.99,64.99,79.99]],["4 QUEIJOS",[44.99,54.99,64.99,79.99]],["MARGUERITA",[44.99,54.99,64.99,79.99]],["VEGETARIANA",[44.99,54.99,64.99,79.99]]
+    ]},
+    {category:"Pizzas Especiais", items:[
+      ["FRANGO ESPECIAL",[45.99,55.99,65.99,80.99]],["CALABRESA ESPECIAL",[44.99,54.99,64.99,79.99]],["BACON ESPECIAL",[44.99,54.99,64.99,79.99]],["RAVENNA",[44.99,54.99,64.99,79.99]],["NÁPOLES",[44.99,54.99,64.99,79.99]],["4 CARNES",[45.99,55.99,65.99,80.99]],["LOMBINHO C/ CHEDDAR",[44.99,54.99,64.99,79.99]],["SAINTROPEZ",[44.99,54.99,64.99,79.99]],["PRESUNTO ESPECIAL",[44.99,54.99,64.99,79.99]],["VENEZA",[44.99,54.99,64.99,79.99]],["CATUPIRY ESPECIAL",[44.99,54.99,64.99,79.99]],["VEGETARIANA ESPECIAL",[44.99,54.99,64.99,79.99]]
+    ]},
+    {category:"Bebidas", items:[
+      ["REFRIGERANTE 1 L - COCA COLA",[10]],["REFRIGERANTE 1,5 L - GUARANÁ MINEIRO",[9]],["REFRIGERANTE 1,5 L - GUARANÁ MINEIRO ZERO",[9]],["REFRIGERANTE 2 L - COCA COLA",[16]],["REFRIGERANTE 2 L - GUARANÁ MINEIRO",[11]],["REFRIGERANTE MINEIRO 600ml",[7]],["REFRIGERANTE MINEIRO 350ml (LATA)",[5]]
+    ]},
+    {category:"Bordas Recheadas", items:[
+      ["CATUPIRY - P",[12]],["CATUPIRY - M",[12]],["CATUPIRY - G",[12]],["CATUPIRY - F",[14]],["CHEDDAR - P",[12]],["CHEDDAR - M",[12]],["CHEDDAR - G",[12]],["CHEDDAR - F",[14]],["CATUPIRY C/ BACON - P",[14]],["CATUPIRY C/ BACON - M",[14]],["CATUPIRY C/ BACON - G",[14]],["CATUPIRY C/ BACON - F",[16]],["CHEDDAR C/ BACON - P",[14]],["CHEDDAR C/ BACON - M",[14]],["CHEDDAR C/ BACON - G",[14]],["CHEDDAR C/ BACON - F",[16]],["PRESUNTO C/ MUSSARELA - P",[16]],["PRESUNTO C/ MUSSARELA - M",[16]],["PRESUNTO C/ MUSSARELA - G",[16]],["PRESUNTO C/ MUSSARELA - F",[18]]
+    ]}
+  ];
+  for(const group of menu){
+    let {data:cat}=await supabase.from("categories").select("id").eq("user_id",user.id).eq("name",group.category).limit(1);
+    let categoryId=cat?.[0]?.id;
+    if(!categoryId){
+      const {data:created}=await supabase.from("categories").insert({user_id:user.id,name:group.category,classification:"Receita"}).select("id").single();
+      categoryId=created?.id;
+    }
+    if(!categoryId) continue;
+    const names=group.items.map(x=>x[0]);
+    const {data:existingProducts}=await supabase.from("products").select("name").eq("user_id",user.id).in("name",names);
+    const existingNames=new Set((existingProducts||[]).map(x=>x.name));
+    const missing=group.items.filter(x=>!existingNames.has(x[0])).map(([name,prices])=>({user_id:user.id,name,category_id:categoryId,sale_price:Number(prices[0]||0),cost_price:0,active:true}));
+    if(missing.length) await supabase.from("products").insert(missing);
+  }
 }
 
 function Login({onLogin}){
@@ -137,10 +166,21 @@ function Despesas({data}){
 }
 
 function Cardapio({data}){
- const [open,setOpen]=useState(false),[form,setForm]=useState({name:"",category_id:"",sale_price:"",cost_price:""});
- async function save(e){e.preventDefault();const {error}=await supabase.from("products").insert({user_id:data.user.id,name:form.name,category_id:form.category_id||null,sale_price:Number(form.sale_price||0),cost_price:Number(form.cost_price||0)});if(error)alert(error.message);else{setOpen(false);data.reload()}}
- const rows=data.products||[];
- return <main className="content"><div className="page-head"><div><h2>Cardápio</h2><p>Produtos, preço de venda, custo e margem.</p></div><button className="primary small" onClick={()=>setOpen(true)}><Plus size={16}/>Novo item</button></div><div className="table-wrap"><table><thead><tr><th>Produto</th><th>Categoria</th><th>Venda</th><th>Custo</th><th>Margem</th><th>Status</th></tr></thead><tbody>{rows.map(x=>{const margin=Number(x.sale_price||0)-Number(x.cost_price||0);return <tr key={x.id}><td>{x.name}</td><td>{x.categories?.name||"—"}</td><td>{money(x.sale_price)}</td><td>{money(x.cost_price)}</td><td>{money(margin)}</td><td>{x.active?"Ativo":"Inativo"}</td></tr>})}{!rows.length&&<EmptyRow text="Nenhum item no cardápio."/>}</tbody></table></div>{open&&<Modal title="Novo item do cardápio" onClose={()=>setOpen(false)}><form className="form-grid" onSubmit={save}><Field label="Nome"><input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></Field><Field label="Categoria"><select value={form.category_id} onChange={e=>setForm({...form,category_id:e.target.value})}><option value="">Selecione</option>{data.categories.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></Field><Field label="Preço de venda"><input type="number" step="0.01" value={form.sale_price} onChange={e=>setForm({...form,sale_price:e.target.value})}/></Field><Field label="Custo"><input type="number" step="0.01" value={form.cost_price} onChange={e=>setForm({...form,cost_price:e.target.value})}/></Field><div className="form-actions"><button className="primary">Salvar item</button></div></form></Modal>}</main>
+ const [open,setOpen]=useState(false),[editing,setEditing]=useState(null),[form,setForm]=useState({name:"",category_id:"",sale_price:"",cost_price:""});
+ const rows=(data.products||[]).filter(x=>x.active!==false);
+ const grouped=rows.reduce((acc,x)=>{const key=x.categories?.name||"Sem categoria";(acc[key]??=[]).push(x);return acc},{}); 
+ function startNew(){setEditing(null);setForm({name:"",category_id:"",sale_price:"",cost_price:""});setOpen(true)}
+ function startEdit(x){setEditing(x);setForm({name:x.name,category_id:x.category_id||"",sale_price:String(x.sale_price??""),cost_price:String(x.cost_price??"")});setOpen(true)}
+ async function save(e){e.preventDefault();const payload={name:form.name.trim(),category_id:form.category_id||null,sale_price:Number(form.sale_price||0),cost_price:Number(form.cost_price||0),active:true};
+   const q=editing?supabase.from("products").update(payload).eq("id",editing.id).eq("user_id",data.user.id):supabase.from("products").insert({...payload,user_id:data.user.id});
+   const {error}=await q;if(error)alert(error.message);else{setOpen(false);data.reload()}
+ }
+ async function remove(x){if(!confirm("Excluir este item do cardápio? Ele será retirado da seleção de novas vendas, preservando o histórico."))return;const {error}=await supabase.from("products").update({active:false}).eq("id",x.id).eq("user_id",data.user.id);if(error)alert(error.message);else data.reload()}
+ return <main className="content"><div className="page-head"><div><h2>Cardápio</h2><p>Produtos separados por tópico, prontos para seleção nas vendas manuais.</p></div><button className="primary small" onClick={startNew}><Plus size={16}/>Novo item</button></div>
+ <div className="filters"><div className="search"><Search size={16}/><input placeholder="Pesquisar produto..." value={data.search} onChange={e=>data.setSearch(e.target.value)}/></div></div>
+ {Object.entries(grouped).map(([category,items])=><section className="panel" key={category}><div className="section-title"><h3>{category}</h3><span>{items.length} item(ns)</span></div><div className="table-wrap"><table><thead><tr><th>Produto</th><th>Venda</th><th>Custo</th><th>Margem</th><th>Ações</th></tr></thead><tbody>{items.map(x=>{const margin=Number(x.sale_price||0)-Number(x.cost_price||0);return <tr key={x.id}><td>{x.name}</td><td>{money(x.sale_price)}</td><td>{money(x.cost_price)}</td><td>{money(margin)}</td><td><button className="icon-btn" title="Editar" onClick={()=>startEdit(x)}>✏️</button><button className="icon-btn" title="Excluir" onClick={()=>remove(x)}>🗑️</button></td></tr>})}</tbody></table></div></section>)}
+ {!rows.length&&<section className="panel"><div className="empty-row">Nenhum item no cardápio.</div></section>}
+ {open&&<Modal title={editing?"Editar item do cardápio":"Novo item do cardápio"} onClose={()=>setOpen(false)}><form className="form-grid" onSubmit={save}><Field label="Nome"><input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></Field><Field label="Categoria"><select value={form.category_id} onChange={e=>setForm({...form,category_id:e.target.value})}><option value="">Selecione</option>{data.categories.filter(x=>["Pizzas Tradicionais","Pizzas Especiais","Bebidas","Bordas Recheadas"].includes(x.name)).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></Field><Field label="Preço de venda"><input type="number" step="0.01" value={form.sale_price} onChange={e=>setForm({...form,sale_price:e.target.value})}/></Field><Field label="Custo"><input type="number" step="0.01" value={form.cost_price} onChange={e=>setForm({...form,cost_price:e.target.value})}/></Field><div className="form-actions"><button className="primary">{editing?"Salvar alterações":"Salvar item"}</button></div></form></Modal>}</main>
 }
 
 function Conciliacao({data}){
