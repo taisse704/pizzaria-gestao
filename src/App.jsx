@@ -135,124 +135,26 @@ function Conciliacao({data}){
  return <main className="content"><div className="page-head"><div><h2>Conciliação</h2><p>Relacione cada movimento bancário ao recebimento ou pagamento correspondente e evite dupla contagem.</p></div></div><div className="table-wrap"><table><thead><tr><th>Data</th><th>Descrição</th><th>Valor</th><th>Possível correspondência</th><th>Ação</th></tr></thead><tbody>{pending.map(tx=>{const s=suggestion(tx);return <tr key={tx.id}><td>{dateBR(tx.fact_date)}</td><td>{tx.description}</td><td>{money(tx.amount)}</td><td>{s?(s.description||"Registro")+" • "+money(s.amount):"Nenhuma automática"}</td><td>{s&&<button className="primary small" onClick={()=>reconcile(tx,tx.direction==="in"?"receivable":"payable",s.id,Math.min(Number(tx.amount),Number(s.amount)))}>Conferir</button>}</td></tr>})}{!pending.length&&<EmptyRow text="Tudo conciliado."/>}</tbody></table></div></main>
 }
 
+function normalizeHeader(v){return String(v??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()}
+function parseMoney(v){if(typeof v==="number")return v;const s=String(v??"").replace(/R\$|BRL/gi,"").replace(/\s/g,"").trim();if(!s)return 0;if(s.includes(",")&&s.includes("."))return Number(s.lastIndexOf(",")>s.lastIndexOf(".")?s.replace(/\./g,"").replace(",","."):s.replace(/,/g,""))||0;if(s.includes(","))return Number(s.replace(",", "."))||0;return Number(s)||0}
+function parseExcelDate(v){if(v instanceof Date&&!Number.isNaN(v.getTime()))return v.toISOString().slice(0,10);if(typeof v==="number"){const d=new Date(Math.round((v-25569)*86400*1000));return Number.isNaN(d.getTime())?today():d.toISOString().slice(0,10)}const s=String(v??"").trim();if(!s)return today();if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)){const [d,m,y]=s.split("/");return y+"-"+m.padStart(2,"0")+"-"+d.padStart(2,"0")}if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);const d=new Date(s);return Number.isNaN(d.getTime())?today():d.toISOString().slice(0,10)}
+function headerIndex(headers,...names){const normalized=headers.map(normalizeHeader);for(const name of names){const i=normalized.indexOf(normalizeHeader(name));if(i>=0)return i}for(const name of names){const n=normalizeHeader(name);const i=normalized.findIndex(h=>h.includes(n)||n.includes(h));if(i>=0)return i}return -1}
+function detectSource(headers){const h=headers.map(normalizeHeader).join(" ");if(/ifood/.test(h))return "ifood";if(/bee.?food|beefod/.test(h))return "beefood";if(/cartao|cartoes|credito|fatura/.test(h))return "cartao";return "banco"}
+async function parseWorkbook(file){const XLSX=await import("xlsx");const buf=await file.arrayBuffer();const wb=XLSX.read(buf,{type:"array",cellDates:true});const ws=wb.Sheets[wb.SheetNames[0]];return XLSX.utils.sheet_to_json(ws,{header:1,defval:""})}
 function Dados({data}){
- const [preview,setPreview]=useState([]),[file,setFile]=useState(null),[busy,setBusy]=useState(false),[message,setMessage]=useState("");
-
- function parseCSV(text){
-  const lines=text.replaceAll("\r","").split("\n").filter(Boolean);
-  if(!lines.length)return [];
-  const sep=lines[0].includes(";")?";":",";
-  return lines.map(line=>line.split(sep).map(v=>{
-   const value=v.trim();
-   return value.startsWith('"')&&value.endsWith('"')?value.slice(1,-1):value;
-  }));
- }
-
- async function importCSV(){
-  if(!file||preview.length<2)return;
-  setBusy(true);
-  setMessage("");
-  const rows=preview.slice(1);
-  const headers=preview[0].map(x=>x.toLowerCase());
-  const idx=(...names)=>names.map(n=>headers.indexOf(n)).find(i=>i>=0);
-  const dateIdx=idx("data","data da transação","date");
-  const descIdx=idx("descrição","descricao","description");
-  const amountIdx=idx("valor","amount");
-  const typeIdx=idx("tipo","type","natureza");
-  const bank=data.banks[0];
-
-  if(!bank){
-   setMessage("Cadastre um banco antes da importação.");
-   setBusy(false);
-   return;
-  }
-
-  const mapped=rows.map(r=>{
-   const raw=String(r[amountIdx]||"0").replaceAll("R$","").trim();
-   const normalized=raw.includes(",")?raw.replaceAll(".","").replace(",","."):raw;
-   const amount=Number(normalized)||0;
-   const type=(r[typeIdx]||"").toLowerCase();
-   return {
-    user_id:data.user.id,
-    bank_account_id:bank.id,
-    fact_date:new Date((r[dateIdx]||today()).split("/").reverse().join("-")+"T12:00:00").toISOString(),
-    competence_date:today(),
-    description:r[descIdx]||"Importado",
-    amount:Math.abs(amount),
-    direction:type.includes("entrada")||type.includes("credito")||type.includes("crédito")||amount>0?"in":"out",
-    classification:type.includes("receita")?"Receita":"Despesas",
-    status:"unreconciled",
-    source:"csv"
-   };
-  });
-
-  const {error}=await supabase.from("bank_transactions").insert(mapped);
-  if(error){
-   setMessage(error.message);
-  }else{
-   setMessage(rows.length+" movimento(s) importado(s).");
-   data.reload();
-  }
-  setBusy(false);
- }
-
- async function onFile(e){
-  const f=e.target.files?.[0];
-  if(!f)return;
-  setFile(f);
-  const txt=await f.text();
-  setPreview(parseCSV(txt).slice(0,101));
- }
-
- return (
-  <main className="content">
-   <div className="page-head">
-    <div>
-     <h2>Dados / Importações / Backup</h2>
-     <p>Importe CSV de extratos e mantenha uma cópia dos dados exportados.</p>
-    </div>
-    <button className="ghost" onClick={()=>downloadCSV(data.bankTx,"backup-extrato.csv")}>
-     <Download size={16}/>Backup CSV
-    </button>
-   </div>
-
-   <section className="panel">
-    <h3>Importar extrato CSV</h3>
-    <p>Colunas reconhecidas: Data, Descrição, Valor e Tipo. A importação entra como "A conferir".</p>
-    <input type="file" accept=".csv,text/csv" onChange={onFile}/>
-
-    {preview.length>0&&(
-     <>
-      <div className="table-wrap" style={{marginTop:16}}>
-       <table>
-        <thead>
-         <tr>{preview[0].map((h,i)=><th key={i}>{h}</th>)}</tr>
-        </thead>
-        <tbody>
-         {preview.slice(1,11).map((r,i)=>(
-          <tr key={i}>
-           {preview[0].map((_,j)=><td key={j}>{r[j]||""}</td>)}
-          </tr>
-         ))}
-        </tbody>
-       </table>
-      </div>
-      <button className="primary" disabled={busy} onClick={importCSV}>
-       {busy ? "Importando..." : "Importar "+Math.max(0,preview.length-1)+" linhas"}
-      </button>
-     </>
-    )}
-   </section>
-
-   {message&&(
-    <section className="panel">
-     <div className="success">{message}</div>
-    </section>
-   )}
-  </main>
- );
+ const [source,setSource]=useState("ifood"),[preview,setPreview]=useState([]),[file,setFile]=useState(null),[busy,setBusy]=useState(false),[message,setMessage]=useState(""),[sheetSource,setSheetSource]=useState("");
+ async function onFile(e){const f=e.target.files?.[0];if(!f)return;setFile(f);setMessage("");try{const rows=await parseWorkbook(f);const clean=rows.filter(r=>Array.isArray(r)&&r.some(v=>String(v??"").trim()!=="")).slice(0,101);setPreview(clean);const detected=detectSource(clean[0]||[]);setSheetSource(detected);if(source==="auto")setSource(detected)}catch(error){setPreview([]);setMessage("Não foi possível ler o Excel: "+(error?.message||"arquivo inválido."))}}
+ function rowsForImport(){return preview.length>1?preview.slice(1).filter(r=>r.some(v=>String(v??"").trim()!=="")):[]}
+ async function ensureImport(sourceName,fileName,count){const bytes=await file.arrayBuffer();const hashBuf=await crypto.subtle.digest("SHA-256",bytes);const hash=Array.from(new Uint8Array(hashBuf)).map(b=>b.toString(16).padStart(2,"0")).join("");const {data:existing}=await supabase.from("imports").select("id").eq("user_id",data.user.id).eq("source",sourceName).eq("file_hash",hash).limit(1);if(existing?.length)return {duplicate:true};const {data:imp,error}=await supabase.from("imports").insert({user_id:data.user.id,source:sourceName,file_name:fileName,row_count:count,status:"processing",file_hash:hash}).select("id").single();if(error)throw error;return {duplicate:false,id:imp.id}}
+ async function finishImport(id,status,count){if(id)await supabase.from("imports").update({status,row_count:count}).eq("id",id)}
+ async function importFile(){const rows=rowsForImport();if(!file||!rows.length)return;setBusy(true);setMessage("");let importId=null;try{const headers=preview[0]||[];const type=source==="auto"?sheetSource:source;const sourceName=type==="ifood"?"iFood":type==="beefood"?"BeeFood":type==="cartao"?"Cartão":"Banco";const imp=await ensureImport(sourceName,file.name,rows.length);if(imp.duplicate){setMessage("Este arquivo já foi importado. Nenhum lançamento duplicado foi criado.");return}importId=imp.id;let inserted=0;
+ if(type==="ifood"||type==="beefood"){const channelName=type==="ifood"?"iFood":"BeeFood";const channel=data.channels.find(c=>normalizeHeader(c.name)===normalizeHeader(channelName));if(!channel)throw new Error("Canal "+channelName+" não encontrado.");const dateIdx=headerIndex(headers,"data","data da venda","data do pedido","date","created at"),grossIdx=headerIndex(headers,"valor bruto","valor total","total","valor da venda","gross","amount","net amount","valor liquido","valor líquido"),feeIdx=headerIndex(headers,"taxa","taxas","comissao","comissão","fee","fees"),discountIdx=headerIndex(headers,"desconto","descontos","discount"),cancelIdx=headerIndex(headers,"cancelamento","cancelamentos","cancellation"),idIdx=headerIndex(headers,"id","pedido","numero do pedido","número do pedido","order id","order"),payIdx=headerIndex(headers,"pagamento","forma de pagamento","payment");if(dateIdx<0||grossIdx<0)throw new Error("Não identifiquei as colunas de data e valor da venda.");const sales=[];for(const r of rows){const gross=Math.abs(parseMoney(r[grossIdx])),fee=Math.abs(parseMoney(r[feeIdx])),discount=Math.abs(parseMoney(r[discountIdx])),cancel=Math.abs(parseMoney(r[cancelIdx]));if(!gross)continue;const fact=parseExcelDate(r[dateIdx]),net=Math.max(0,gross-discount-fee-cancel),external=idIdx>=0?String(r[idIdx]??"").trim():"";sales.push({user_id:data.user.id,channel_id:channel.id,external_id:external||null,fact_date:new Date(fact+"T12:00:00").toISOString(),competence_date:fact,gross_amount:gross,discounts:discount,fees:fee,cancellations:cancel,net_amount:net,payment_method:payIdx>=0?String(r[payIdx]??"").trim()||null:null,status:"confirmed",source:type})}if(!sales.length)throw new Error("Nenhuma venda válida foi encontrada no Excel.");const extIds=sales.map(x=>x.external_id).filter(Boolean);let oldSet=new Set();if(extIds.length){const {data:old}=await supabase.from("sales").select("external_id").eq("user_id",data.user.id).in("external_id",extIds);oldSet=new Set((old||[]).map(x=>x.external_id))}const fresh=sales.filter(x=>!x.external_id||!oldSet.has(x.external_id));if(fresh.length){const {data:created,error}=await supabase.from("sales").insert(fresh).select("id,net_amount,competence_date,payment_method,source");if(error)throw error;const recv=(created||[]).map(s=>({user_id:data.user.id,sale_id:s.id,description:"Venda "+s.source+(s.payment_method?" • "+s.payment_method:""),competence_date:s.competence_date,expected_date:s.competence_date,amount:Number(s.net_amount||0),received_amount:0,status:"pending",source:s.source}));if(recv.length){const {error:e}=await supabase.from("receivables").insert(recv);if(e)throw e}}inserted=fresh.length;await finishImport(importId,"completed",inserted);setMessage(inserted+" venda(s) de "+channelName+" importada(s). "+(sales.length-inserted)+" já existia(m) e foi(ram) ignorada(s).");
+ }else if(type==="banco"){const bank=data.banks[0];if(!bank)throw new Error("Cadastre um banco antes da importação.");const dateIdx=headerIndex(headers,"data","data da transação","data movimento","date"),descIdx=headerIndex(headers,"descrição","descricao","description","histórico","historico"),amountIdx=headerIndex(headers,"valor","amount","valor da transação","value"),typeIdx=headerIndex(headers,"tipo","type","natureza","débito crédito","debito credito"),idIdx=headerIndex(headers,"id","identificador","documento","transaction id","codigo");if(dateIdx<0||descIdx<0||amountIdx<0)throw new Error("Não identifiquei as colunas de data, descrição e valor do extrato.");const mapped=rows.map(r=>{const raw=parseMoney(r[amountIdx]),kind=normalizeHeader(r[typeIdx]);const direction=/entrada|credito|deposito|receita/.test(kind)||raw>0?"in":"out";return {user_id:data.user.id,bank_account_id:bank.id,fact_date:new Date(parseExcelDate(r[dateIdx])+"T12:00:00").toISOString(),competence_date:parseExcelDate(r[dateIdx]),description:String(r[descIdx]||"Importado"),amount:Math.abs(raw),direction,classification:direction==="in"?"Receita":"Despesas",status:"unreconciled",external_id:idIdx>=0?String(r[idIdx]||"").trim()||null:null,source:"excel"}}).filter(x=>x.amount>0);const ids=mapped.map(x=>x.external_id).filter(Boolean);let oldSet=new Set();if(ids.length){const {data:old}=await supabase.from("bank_transactions").select("external_id").eq("user_id",data.user.id).in("external_id",ids);oldSet=new Set((old||[]).map(x=>x.external_id))}const fresh=mapped.filter(x=>!x.external_id||!oldSet.has(x.external_id));if(fresh.length){const {error}=await supabase.from("bank_transactions").insert(fresh);if(error)throw error}inserted=fresh.length;await finishImport(importId,"completed",inserted);setMessage(inserted+" movimento(s) bancário(s) importado(s). "+(mapped.length-inserted)+" já existia(m) e foi(ram) ignorado(s).");
+ }else{const card=data.cards[0];if(!card)throw new Error("Cadastre um cartão antes da importação.");const dateIdx=headerIndex(headers,"data","data da compra","data lançamento","date"),descIdx=headerIndex(headers,"descrição","descricao","estabelecimento","merchant","description"),amountIdx=headerIndex(headers,"valor","amount","valor da compra","total"),idIdx=headerIndex(headers,"id","identificador","documento","transaction id","codigo"),instIdx=headerIndex(headers,"parcelas","installments","parcela");if(dateIdx<0||descIdx<0||amountIdx<0)throw new Error("Não identifiquei as colunas de data, descrição e valor do cartão.");const mapped=rows.map(r=>({user_id:data.user.id,card_account_id:card.id,fact_date:parseExcelDate(r[dateIdx]),competence_date:parseExcelDate(r[dateIdx]),description:String(r[descIdx]||"Compra importada"),category_id:null,total_amount:Math.abs(parseMoney(r[amountIdx])),installments:Math.max(1,parseInt(r[instIdx],10)||1),source:"excel",external_id:idIdx>=0?String(r[idIdx]||"").trim()||null:null})).filter(x=>x.total_amount>0);const ids=mapped.map(x=>x.external_id).filter(Boolean);let oldSet=new Set();if(ids.length){const {data:old}=await supabase.from("card_transactions").select("external_id").eq("user_id",data.user.id).in("external_id",ids);oldSet=new Set((old||[]).map(x=>x.external_id))}const fresh=mapped.filter(x=>!x.external_id||!oldSet.has(x.external_id));for(const t of fresh){const {data:created,error}=await supabase.from("card_transactions").insert(t).select("id").single();if(error)throw error;const n=t.installments,base=Math.floor(t.total_amount/n*100)/100;let acc=0;for(let k=1;k<=n;k++){const amount=k===n?Number((t.total_amount-acc).toFixed(2)):base;acc+=amount;const d=new Date(t.fact_date+"T12:00:00");d.setMonth(d.getMonth()+k-1);const due=new Date(d.getFullYear(),d.getMonth(),Number(card.due_day||10));await supabase.from("card_installments").insert({card_transaction_id:created.id,installment_number:k,due_date:due.toISOString().slice(0,10),amount,status:"open"})}inserted++}await finishImport(importId,"completed",inserted);setMessage(inserted+" compra(s) de cartão importada(s). "+(mapped.length-inserted)+" já existia(m) e foi(ram) ignorado(s).")}
+ data.reload();
+ }catch(error){if(importId)await finishImport(importId,"error",0);setMessage(error?.message||"Erro ao importar o arquivo.")}finally{setBusy(false)}}
+ return <main className="content"><div className="page-head"><div><h2>Dados / Importações / Backup</h2><p>Importe Excel/CSV do iFood, BeeFood, banco e cartão de crédito sem duplicar lançamentos.</p></div><button className="ghost" onClick={()=>downloadCSV(data.bankTx,"backup-extrato.csv")}><Download size={16}/>Backup CSV</button></div><section className="panel"><h3>Importar Excel / CSV</h3><div className="form-grid"><Field label="Origem"><select value={source} onChange={e=>setSource(e.target.value)}><option value="ifood">iFood — vendas</option><option value="beefood">BeeFood — vendas</option><option value="banco">Banco — extrato</option><option value="cartao">Cartão de crédito — fatura</option><option value="auto">Detectar automaticamente</option></select></Field><Field label="Arquivo"><input type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" onChange={onFile}/></Field></div>{sheetSource&&<p className="success">Formato identificado: {sheetSource==="ifood"?"iFood":sheetSource==="beefood"?"BeeFood":sheetSource==="cartao"?"Cartão":"Banco"}.</p>}{preview.length>0&&<><div className="table-wrap" style={{marginTop:16}}><table><thead><tr>{preview[0].map((h,i)=><th key={i}>{h||"—"}</th>)}</tr></thead><tbody>{preview.slice(1,11).map((r,i)=><tr key={i}>{preview[0].map((_,j)=><td key={j}>{String(r[j]??"")}</td>)}</tr>)}</tbody></table></div><button className="primary" disabled={busy} onClick={importFile}>{busy?"Importando...":"Importar "+rowsForImport().length+" linhas"}</button></>}</section>{message&&<section className="panel"><div className={message.includes("Erro")||message.includes("não foi")?"error":"success"}>{message}</div></section>}</main>
 }
-
 function TableToolbar({search,setSearch,exportData}){return <div className="filters"><div className="search"><Search size={16}/><input placeholder="Pesquisar..." value={search} onChange={e=>setSearch(e.target.value)}/></div><button className="ghost" onClick={exportData}><Download size={16}/>CSV</button></div>}
 function Field({label,children}){return <label className="field"><span>{label}</span>{children}</label>}
 function Modal({title,onClose,children}){return <div className="modal-backdrop"><div className="modal"><div className="modal-head"><h3>{title}</h3><button className="icon-btn" onClick={onClose}><X size={18}/></button></div>{children}</div></div>}
