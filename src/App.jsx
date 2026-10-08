@@ -86,8 +86,7 @@ async function seedUser(user){
       const p=prices||[];
       const payload={category_id:categoryId,description,price_p:p[0]??null,price_m:p[1]??null,price_g:p[2]??null,price_f:p[3]??null,sale_price:Number(p[0]??p[1]??p[2]??p[3]??0),active:true,cost_price:0};
       const {data:existing}=await supabase.from("products").select("id").eq("user_id",user.id).eq("name",name).limit(1);
-      if(existing?.[0]) await supabase.from("products").update(payload).eq("id",existing[0].id).eq("user_id",user.id);
-      else await supabase.from("products").insert({...payload,user_id:user.id,name});
+      if(!existing?.[0]) await supabase.from("products").insert({...payload,user_id:user.id,name});
     }
   }
 }
