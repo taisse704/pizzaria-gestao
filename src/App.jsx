@@ -262,7 +262,48 @@ function Dados({data}){
  const ids=mapped.map(x=>x.external_id).filter(Boolean);let oldSet=new Set();if(ids.length){const {data:old}=await supabase.from("card_transactions").select("external_id").eq("user_id",data.user.id).in("external_id",ids);oldSet=new Set((old||[]).map(x=>x.external_id))}const fresh=mapped.filter(x=>!x.external_id||!oldSet.has(x.external_id));for(const t of fresh){const {data:created,error}=await supabase.from("card_transactions").insert(t).select("id").single();if(error)throw error;const n=t.installments,base=Math.floor(t.total_amount/n*100)/100;let acc=0;for(let k=1;k<=n;k++){const amount=k===n?Number((t.total_amount-acc).toFixed(2)):base;acc+=amount;const d=new Date(t.fact_date+"T12:00:00");d.setMonth(d.getMonth()+k-1);const due=new Date(d.getFullYear(),d.getMonth(),Number(card.due_day||10));await supabase.from("card_installments").insert({card_transaction_id:created.id,installment_number:k,due_date:due.toISOString().slice(0,10),amount,status:"open"})}inserted++}await finishImport(importId,"completed",inserted);setMessage(inserted+" compra(s) de cartão importada(s). "+(mapped.length-inserted)+" já existia(m) e foi(ram) ignorada(s).")}
  data.reload();
  }catch(error){if(importId)await finishImport(importId,"error",0);setMessage(error?.message||"Erro ao importar o arquivo.")}finally{setBusy(false)}}
- return <main className="content"><div className="page-head"><div><h2>Dados / Importações / Backup</h2><p>Importe Excel/CSV do iFood, BeeFood, iFood Pago, TON e cartão de crédito sem duplicar lançamentos.</p></div><button className="ghost" onClick={()=>downloadCSV(data.bankTx,"backup-extrato.csv")}><Download size={16}/>Backup CSV</button></div><section className="panel"><h3>Importar Excel / CSV</h3><div className="form-grid"><Field label="Origem"><select value={source} onChange={e=>setSource(e.target.value)}><option value="ifood">iFood — vendas</option><option value="beefood">BeeFood — vendas</option><option value="bank_ifood">Banco — iFood Pago</option><option value="bank_ton">Banco — TON</option><option value="cartao">Cartão de crédito — fatura</option><option value="auto">Detectar automaticamente</option></select></Field><Field label="Arquivo"><input type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" onChange={onFile}/></Field></div>{sheetSource&&<p className="success">Formato identificado: {sheetSource==="ifood"?"iFood":sheetSource==="beefood"?"BeeFood":sheetSource==="cartao"?"Cartão":sheetSource==="bank_ton"?"Banco TON":"Banco iFood Pago"}.</p>}{preview.length>0&&<><div className="table-wrap" style={{marginTop:16}}><table><thead><tr>{preview[0].map((h,i)=><th key={i}>{h||"—"}</th>)}</tr></thead><tbody>{preview.slice(1,11).map((r,i)=><tr key={i}>{preview[0].map((_,j)=><td key={j}>{String(r[j]??"")}</td>)}</tr>)}</tbody></table></div><button className="primary" disabled={busy} onClick={importFile}>{busy?"Importando...":"Importar "+rowsForImport().length+" linhas"}</button></>}</section>{message&&<section className="panel"><div className={message.includes("Erro")||message.includes("não foi")?"error":"success"}>{message}</div></section></main>
+ return (
+  <main className="content">
+    <div className="page-head">
+      <div>
+        <h2>Dados / Importações / Backup</h2>
+        <p>Importe Excel/CSV do iFood, BeeFood, iFood Pago, TON e cartão de crédito sem duplicar lançamentos.</p>
+      </div>
+      <button className="ghost" onClick={()=>downloadCSV(data.bankTx,"backup-extrato.csv")}><Download size={16}/>Backup CSV</button>
+    </div>
+    <section className="panel">
+      <h3>Importar Excel / CSV</h3>
+      <div className="form-grid">
+        <Field label="Origem">
+          <select value={source} onChange={e=>setSource(e.target.value)}>
+            <option value="ifood">iFood — vendas</option>
+            <option value="beefood">BeeFood — vendas</option>
+            <option value="bank_ifood">Banco — iFood Pago</option>
+            <option value="bank_ton">Banco — TON</option>
+            <option value="cartao">Cartão de crédito — fatura</option>
+            <option value="auto">Detectar automaticamente</option>
+          </select>
+        </Field>
+        <Field label="Arquivo">
+          <input type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" onChange={onFile}/>
+        </Field>
+      </div>
+      {sheetSource && <p className="success">Formato identificado: {sheetSource==="ifood"?"iFood":sheetSource==="beefood"?"BeeFood":sheetSource==="cartao"?"Cartão":sheetSource==="bank_ton"?"Banco TON":"Banco iFood Pago"}.</p>}
+      {preview.length>0 && (
+        <>
+          <div className="table-wrap" style={{marginTop:16}}>
+            <table>
+              <thead><tr>{preview[0].map((h,i)=><th key={i}>{h||"—"}</th>)}</tr></thead>
+              <tbody>{preview.slice(1,11).map((r,i)=><tr key={i}>{preview[0].map((_,j)=><td key={j}>{String(r[j]??"")}</td>)}</tr>)}</tbody>
+            </table>
+          </div>
+          <button className="primary" disabled={busy} onClick={importFile}>{busy?"Importando...":"Importar "+rowsForImport().length+" linhas"}</button>
+        </>
+      )}
+    </section>
+    {message && <section className="panel"><div className={message.includes("Erro")||message.includes("não foi")?"error":"success"}>{message}</div></section>}
+  </main>
+ )
 }
 function TableToolbar({search,setSearch,exportData}){return <div className="filters"><div className="search"><Search size={16}/><input placeholder="Pesquisar..." value={search} onChange={e=>setSearch(e.target.value)}/></div><button className="ghost" onClick={exportData}><Download size={16}/>CSV</button></div>}
 function Field({label,children}){return <label className="field"><span>{label}</span>{children}</label>}
