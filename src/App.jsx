@@ -487,10 +487,11 @@ function Conciliacao({data}){
  const [fees,setFees]=useState("0");
  const [adjustments,setAdjustments]=useState("0");
  const [channelFilter,setChannelFilter]=useState("");
+ const [reconcileType,setReconcileType]=useState("sales");
  const [saving,setSaving]=useState(false);
  const [batches,setBatches]=useState([]);
  const [loadingBatches,setLoadingBatches]=useState(true);
- const pending=(data.bankTx||[]).filter(x=>x.status!=="reconciled"&&x.direction==="in");
+ const pending=(data.bankTx||[]).filter(x=>x.status!=="reconciled"&&(reconcileType==="other"||x.direction==="in"));
  const tx=pending.find(x=>x.id===selectedTx);
  const loadBatches=async()=>{
    setLoadingBatches(true);
@@ -505,7 +506,7 @@ function Conciliacao({data}){
    if(s.status==="cancelled"||usedSaleIds.has(s.id))return false;
    const channelName=normalizeHeader(s.channels?.name||data.channels.find(c=>c.id===s.channel_id)?.name||"");
    if(channelFilter&&!channelName.includes(normalizeHeader(channelFilter)))return false;
-   return ["ifood","beefood","99food"].includes(normalizeHeader(channelName));
+   return true;
  }).sort((a,b)=>String(b.fact_date||"").localeCompare(String(a.fact_date||"")));
  const selected=availableSales.filter(s=>selectedSales.includes(s.id));
  const salesNet=selected.reduce((sum,s)=>sum+Number(s.net_amount||0),0);
@@ -516,14 +517,26 @@ function Conciliacao({data}){
  const saleRows=availableSales.map(s=>{const checked=selectedSales.includes(s.id);return <tr key={s.id}><td><input type="checkbox" checked={checked} onChange={()=>toggleSale(s.id)}/></td><td>{dateBR(String(s.fact_date||"").slice(0,10))}</td><td>{s.channels?.name||data.channels.find(c=>c.id===s.channel_id)?.name||"—"}</td><td>{s.external_id||"Venda"}{s.payment_method?" • "+s.payment_method:""}</td><td>{money(s.gross_amount)}</td><td>{money(Number(s.fees||0)+Number(s.discounts||0))}</td><td>{money(s.net_amount)}</td></tr>});
  function toggleSale(id){setSelectedSales(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id])}
  function clearSelection(){setSelectedSales([]);setSelectedTx("");setFees("0");setAdjustments("0")}
+ function changeReconcileType(value){setReconcileType(value);setSelectedTx("");setSelectedSales([]);setFees("0");setAdjustments("0")}
+ async function markOther(){
+   if(!tx)return alert("Selecione uma movimentação bancária.");
+   if(!confirm("Marcar esta movimentação como Outros e como Conferida? Ela ficará registrada assim no extrato."))return;
+   setSaving(true);
+   try{
+     const {error}=await supabase.from("bank_transactions").update({classification:"Outros",status:"reconciled",reference_type:"other",reference_id:null}).eq("id",tx.id).eq("user_id",data.user.id);
+     if(error)throw error;
+     clearSelection();await data.reload();
+   }catch(error){alert(error?.message||"Não foi possível marcar a movimentação como Outros.")}finally{setSaving(false)}
+ }
  function chooseTx(x){
    setSelectedTx(x.id);
    const desc=normalizeHeader(x.description||"");
    if(desc.includes("beefood"))setFees("1.99");else setFees("0");
  }
  async function createBatch(){
-   if(!tx)return alert("Selecione primeiro o repasse/movimento bancário.");
-   if(!selected.length)return alert("Selecione pelo menos uma venda que pertence a este repasse.");
+   if(!tx)return alert("Selecione primeiro a entrada bancária.");
+   if(tx.direction!=="in")return alert("Para vincular vendas, selecione uma entrada bancária. Saídas podem ser classificadas como Outros.");
+   if(!selected.length)return alert("Selecione pelo menos uma venda que pertence a esta entrada.");
    if(Math.abs(difference)>0.01&&!confirm("O valor do banco não fecha com as vendas selecionadas após taxas/ajustes. Deseja salvar mesmo assim para registrar a diferença?"))return;
    setSaving(true);
    try{
@@ -535,9 +548,14 @@ function Conciliacao({data}){
      const {error:linkError}=await supabase.from("reconciliation_batch_items").insert(links);
      if(linkError)throw linkError;
      for(const s of selected){
-       const {data:recv}=await supabase.from("receivables").select("id").eq("sale_id",s.id).eq("user_id",data.user.id).limit(1);
+       const {data:recv,error:recvError}=await supabase.from("receivables").select("id").eq("sale_id",s.id).eq("user_id",data.user.id).limit(1);
+       if(recvError)throw recvError;
+       const receivedPayload={received_amount:Number(s.net_amount||0),received_date:String(tx.fact_date||"").slice(0,10)||today(),status:"received",bank_account_id:tx.bank_account_id};
        if(recv?.[0]){
-         const {error:e}=await supabase.from("receivables").update({received_amount:Number(s.net_amount||0),received_date:String(tx.fact_date||"").slice(0,10)||today(),status:"received",bank_account_id:tx.bank_account_id}).eq("id",recv[0].id).eq("user_id",data.user.id);
+         const {error:e}=await supabase.from("receivables").update(receivedPayload).eq("id",recv[0].id).eq("user_id",data.user.id);
+         if(e)throw e;
+       }else{
+         const {error:e}=await supabase.from("receivables").insert({user_id:data.user.id,sale_id:s.id,description:"Recebimento vinculado à venda "+(s.external_id||""),competence_date:String(s.competence_date||s.fact_date||today()).slice(0,10),expected_date:String(s.competence_date||s.fact_date||today()).slice(0,10),amount:Number(s.net_amount||0),...receivedPayload,source:"reconciliation"});
          if(e)throw e;
        }
      }
@@ -562,22 +580,28 @@ function Conciliacao({data}){
  return <main className="content">
   <div className="page-head"><div><h2>Conciliação</h2><p>Concilie um repasse do banco com uma ou várias vendas. As taxas do repasse ficam separadas das taxas da venda.</p></div></div>
   <section className="panel">
-   <div className="section-title"><h3>➕ Novo repasse</h3><span>{pending.length} recebimento(s) bancário(s) pendente(s)</span></div>
+   <div className="section-title"><h3>➕ Conferir movimentação</h3><span>{pending.length} movimentação(ões) pendente(s)</span></div>
    <div className="form-grid">
-    <Field label="Repasse / entrada no banco"><select value={selectedTx} onChange={e=>{const x=pending.find(t=>t.id===e.target.value);x?chooseTx(x):setSelectedTx("")}}><option value="">Selecione o recebimento...</option>{pending.map(x=><option key={x.id} value={x.id}>{dateBR(String(x.fact_date||"").slice(0,10))} • {money(x.amount)} • {x.description}</option>)}</select></Field>
-    <Field label="Canal"><select value={channelFilter} onChange={e=>{setChannelFilter(e.target.value);setSelectedSales([])}}><option value="">Todos</option>{data.channels.filter(c=>["ifood","beefood","99food"].includes(normalizeHeader(c.name))).map(c=><option key={c.id} value={c.name}>{c.name}</option>)}</select></Field>
+    <Field label="Como deseja conferir?"><select value={reconcileType} onChange={e=>changeReconcileType(e.target.value)}><option value="sales">Vincular entrada a venda(s)</option><option value="other">Outros — sem venda/conta vinculada</option></select></Field>
+    <Field label={reconcileType==="sales"?"Entrada bancária":"Entrada ou saída bancária"}><select value={selectedTx} onChange={e=>{const x=pending.find(t=>t.id===e.target.value);x?chooseTx(x):setSelectedTx("")}}><option value="">Selecione a movimentação...</option>{pending.map(x=><option key={x.id} value={x.id}>{dateBR(String(x.fact_date||"").slice(0,10))} • {x.direction==="in"?"Entrada":"Saída"} • {money(x.amount)} • {x.description}</option>)}</select></Field>
+    {reconcileType==="sales"&&<>
+    <Field label="Canal da venda"><select value={channelFilter} onChange={e=>{setChannelFilter(e.target.value);setSelectedSales([])}}><option value="">Todos os canais, inclusive venda direta</option>{data.channels.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}</select></Field>
     <Field label="Taxa deste repasse"><input type="number" step="0.01" value={fees} onChange={e=>setFees(e.target.value)} placeholder="Ex.: 1,99"/></Field>
     <Field label="Ajuste (+/-)"><input type="number" step="0.01" value={adjustments} onChange={e=>setAdjustments(e.target.value)} placeholder="0,00"/></Field>
+   </>}
    </div>
-   <div className="summary-grid" style={{marginTop:16}}>
-    <div><b>{money(salesNet)}</b><span>líquido das vendas selecionadas</span></div>
-    <div><b>{money(feeValue)}</b><span>taxa do repasse</span></div>
-    <div><b>{money(expectedNet)}</b><span>valor esperado</span></div>
-    <div><b>{money(difference)}</b><span>diferença banco × esperado</span></div>
-   </div>
-   <div className="table-wrap" style={{marginTop:16}}><table><thead><tr><th></th><th>Data</th><th>Canal</th><th>Descrição</th><th>Bruto</th><th>Taxas</th><th>Líquido</th></tr></thead><tbody>{saleRows}{!availableSales.length&&<EmptyRow text="Nenhuma venda de plataforma disponível para vincular."/>}</tbody></table></div>
-   <div className="actions" style={{marginTop:16}}><button className="primary" disabled={saving||!selected.length||!tx} onClick={createBatch}>{saving?"Conciliando...":"Conciliar repasse"}</button><button className="ghost" onClick={clearSelection}>Limpar</button></div>
-   {tx&&<p className={Math.abs(difference)<=0.01?"success":"error"} style={{marginTop:12}}>{Math.abs(difference)<=0.01?"Fechamento conferido: o valor do banco bate com o esperado.":"Atenção: o banco e as vendas selecionadas têm uma diferença de "+money(difference)+"."}</p>}
+   {reconcileType==="sales"&&<>
+    <div className="summary-grid" style={{marginTop:16}}>
+     <div><b>{money(salesNet)}</b><span>líquido das vendas selecionadas</span></div>
+     <div><b>{money(feeValue)}</b><span>taxa deste repasse</span></div>
+     <div><b>{money(expectedNet)}</b><span>valor esperado</span></div>
+     <div><b>{money(difference)}</b><span>diferença banco × esperado</span></div>
+    </div>
+    <div className="table-wrap" style={{marginTop:16}}><table><thead><tr><th></th><th>Data</th><th>Canal</th><th>Descrição</th><th>Bruto</th><th>Taxas</th><th>Líquido</th></tr></thead><tbody>{saleRows}{!availableSales.length&&<EmptyRow text="Nenhuma venda disponível para vincular. As vendas diretas também aparecem aqui."/>}</tbody></table></div>
+    <div className="actions" style={{marginTop:16}}><button className="primary" disabled={saving||!selected.length||!tx} onClick={createBatch}>{saving?"Conciliando...":"Vincular venda(s) e conferir entrada"}</button><button className="ghost" onClick={clearSelection}>Limpar</button></div>
+    {tx&&<p className={Math.abs(difference)<=0.01?"success":"error"} style={{marginTop:12}}>{Math.abs(difference)<=0.01?"Fechamento conferido: o valor do banco bate com o esperado.":"Atenção: o banco e as vendas selecionadas têm uma diferença de "+money(difference)+"."}</p>}
+   </>}
+   {reconcileType==="other"&&<div className="actions" style={{marginTop:16}}><p>Use esta opção para transferências, aportes, ajustes ou qualquer entrada/saída que não seja venda nem conta. A classificação “Outros” e o status “Conferido” serão salvos no extrato.</p><button className="primary" disabled={saving||!tx} onClick={markOther}>{saving?"Salvando...":"Marcar como Outros e Conferido"}</button><button className="ghost" onClick={clearSelection}>Limpar</button></div>}
   </section>
   <section className="panel">
    <div className="section-title"><h3>Repasses já conciliados</h3></div>
