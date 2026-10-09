@@ -157,8 +157,7 @@ function Vendas({data}){
    if(line.type==="pizza"){
      const p1=products.find(x=>x.id===line.product_id),p2=products.find(x=>x.id===line.flavor_2_product_id),b=products.find(x=>x.id===line.border_product_id);
      if(!p1||!line.size)return 0;
-     const a=priceFor(p1,line.size),pizza=p2?(a+priceFor(p2,line.size))/2:a;
-     return (pizza+(b?priceFor(b,line.size):0))*qty;
+     const a=priceFor(p1,line.size),pizza=p2?(a+priceFor(p2,line.size))/2:a;     return (pizza+(b?priceFor(b,line.size):0))*qty;
    }
    const p=products.find(x=>x.id===line.product_id);
    if(!p)return 0;
@@ -317,8 +316,7 @@ function Cartoes({data}){
    setLoadError(error?.message||"Não foi possível carregar as compras de cartão.");
   }finally{setLoading(false)}
  }
- useEffect(()=>{load()},[data.user.id]);
- const allSelected=rows.length>0&&rows.every(x=>selected.has(x.id));
+ useEffect(()=>{load()},[data.user.id]); const allSelected=rows.length>0&&rows.every(x=>selected.has(x.id));
  function toggleOne(id){setSelected(prev=>{const next=new Set(prev);next.has(id)?next.delete(id):next.add(id);return next})}
  function toggleAll(){setSelected(prev=>{const next=new Set(prev);if(allSelected)rows.forEach(x=>next.delete(x.id));else rows.forEach(x=>next.add(x.id));return next})}
  async function removeSelected(){
@@ -366,8 +364,83 @@ function Cartoes({data}){
 }
 function Caixa({data}){const [bank,setBank]=useState(""),[from,setFrom]=useState(monthStart()),[to,setTo]=useState(today());const tx=data.bankTx.filter(x=>(!bank||x.bank_account_id===bank)&&(!from||x.fact_date>=from)&&(!to||x.fact_date<=to));const entradas=tx.filter(x=>x.direction==="in").reduce((a,x)=>a+Number(x.amount||0),0),saidas=tx.filter(x=>x.direction==="out").reduce((a,x)=>a+Number(x.amount||0),0);const previstos=data.receivables.filter(x=>x.status!=="received"&&(!from||x.expected_date>=from)&&(!to||x.expected_date<=to)).reduce((a,x)=>a+Number(x.amount||0),0);const pagar=data.payables.filter(x=>x.status!=="paid"&&(!from||x.due_date>=from)&&(!to||x.due_date<=to)).reduce((a,x)=>a+Number(x.amount||0),0);return <main className="content"><div className="page-head"><div><h2>Caixa / Fluxo de caixa</h2><p>Entradas e saídas pelo fato gerador, com visão do realizado e do previsto.</p></div><button className="ghost" onClick={()=>downloadCSV(tx,"fluxo-de-caixa.csv")}><Download size={16}/>CSV</button></div><div className="filters"><select value={bank} onChange={e=>setBank(e.target.value)}><option value="">Todos os bancos</option>{data.banks.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select><Field label="De"><input type="date" value={from} onChange={e=>setFrom(e.target.value)}/></Field><Field label="Até"><input type="date" value={to} onChange={e=>setTo(e.target.value)}/></Field></div><div className="cards"><div className="card"><span>Entradas realizadas</span><strong>{money(entradas)}</strong></div><div className="card"><span>Saídas realizadas</span><strong>{money(saidas)}</strong></div><div className="card"><span>Saldo do período</span><strong>{money(entradas-saidas)}</strong></div><div className="card"><span>Previsto ainda a receber</span><strong>{money(previstos)}</strong></div><div className="card"><span>Previsto a pagar</span><strong>{money(pagar)}</strong></div></div><section className="panel"><div className="section-title"><h3>Movimentações</h3><span>{tx.length} registro(s)</span></div><div className="table-wrap"><table><thead><tr><th>Data</th><th>Descrição</th><th>Banco</th><th>Classificação</th><th>Entrada</th><th>Saída</th><th>Status</th></tr></thead><tbody>{tx.map(x=><tr key={x.id}><td>{dateBR(x.fact_date)}</td><td>{x.description}</td><td>{x.bank_accounts?.name||"—"}</td><td>{x.classification}</td><td>{x.direction==="in"?money(x.amount):"—"}</td><td>{x.direction==="out"?money(x.amount):"—"}</td><td>{x.status==="reconciled"?"Conferido":"A conferir"}</td></tr>)}{!tx.length&&<EmptyRow text="Nenhuma movimentação no período."/>}</tbody></table></div></section></main>}
 
-function Relatorios({data}){const totalIn=data.bankTx.filter(x=>x.direction==="in").reduce((a,x)=>a+Number(x.amount),0),totalOut=data.bankTx.filter(x=>x.direction==="out").reduce((a,x)=>a+Number(x.amount),0);return <main className="content"><div className="page-head"><div><h2>Relatórios</h2><p>Visão financeira consolidada.</p></div><button className="ghost" onClick={()=>downloadCSV(data.bankTx,"relatorio-financeiro.csv")}><Download size={16}/>Exportar CSV</button></div><div className="cards"><div className="card"><span>Entradas</span><strong>{money(totalIn)}</strong></div><div className="card"><span>Saídas</span><strong>{money(totalOut)}</strong></div><div className="card"><span>Resultado de caixa</span><strong>{money(totalIn-totalOut)}</strong></div><div className="card"><span>Vendas líquidas</span><strong>{money(data.sales.reduce((a,x)=>a+Number(x.net_amount||0),0))}</strong></div></div><section className="panel"><h3>Conferência</h3><p>Movimentos bancários não conciliados: <b>{data.bankTx.filter(x=>x.status==="unreconciled").length}</b>.</p><p>Contas a pagar pendentes: <b>{data.payables.filter(x=>x.status!=="paid").length}</b>.</p><p>Recebimentos pendentes: <b>{data.receivables.filter(x=>x.status!=="received").length}</b>.</p></section></main>}
-
+function Relatorios({data}){
+ const [view,setView]=useState("month"),[month,setMonth]=useState("2026-10"),[year,setYear]=useState("2026"),[bank,setBank]=useState("");
+ const monthKey=x=>String(x?.competence_date||x?.fact_date||x?.due_date||x?.expected_date||"").slice(0,7);
+ const cashMonth=x=>String(x?.received_date||x?.payment_date||x?.fact_date||"").slice(0,7);
+ const inRange=(key)=>view==="year"?key.startsWith(year):key===month;
+ const sales=(data.sales||[]).filter(x=>x.status!=="cancelled"&&inRange(monthKey(x)));
+ const payables=(data.payables||[]).filter(x=>inRange(monthKey(x)));
+ const bankTx=(data.bankTx||[]).filter(x=>(!bank||x.bank_account_id===bank)&&inRange(monthKey(x)));
+ const received=(data.receivables||[]).filter(x=>x.status==="received"&&inRange(cashMonth(x)));
+ const sum=(rows,field)=>rows.reduce((total,x)=>total+Number(x?.[field]||0),0);
+ const gross=sum(sales,"gross_amount"),discounts=sum(sales,"discounts"),fees=sum(sales,"fees"),cancellations=sum(sales,"cancellations"),net=sum(sales,"net_amount");
+ const paid=payables.filter(x=>x.status==="paid"),pending=payables.filter(x=>x.status!=="paid");
+ const bankIn=bankTx.filter(x=>x.direction==="in"),bankOut=bankTx.filter(x=>x.direction==="out");
+ const receivedTotal=received.reduce((a,x)=>a+Number(x.received_amount??x.amount??0),0);
+ const fmtMonth=key=>{const [y,m]=key.split("-");return new Date(Number(y),Number(m)-1,1).toLocaleDateString("pt-BR",{month:"long",year:"numeric"})};
+ const monthlyRows=Array.from({length:12},(_,i)=>{
+   const key=year+"-"+String(i+1).padStart(2,"0");
+   const s=(data.sales||[]).filter(x=>x.status!=="cancelled"&&monthKey(x)===key);
+   const p=(data.payables||[]).filter(x=>monthKey(x)===key);
+   const bt=(data.bankTx||[]).filter(x=>(!bank||x.bank_account_id===bank)&&monthKey(x)===key);
+   const rec=(data.receivables||[]).filter(x=>x.status==="received"&&cashMonth(x)===key);
+   return {competencia:fmtMonth(key),vendas_brutas:sum(s,"gross_amount"),descontos:sum(s,"discounts"),taxas:sum(s,"fees"),cancelamentos:sum(s,"cancellations"),vendas_liquidas:sum(s,"net_amount"),contas_lancadas:sum(p,"amount"),contas_pagas:sum(p.filter(x=>x.status==="paid"),"amount"),contas_em_aberto:sum(p.filter(x=>x.status!=="paid"),"amount"),despesas_bancarias:sum(bt.filter(x=>x.direction==="out"),"amount"),entradas_bancarias:sum(bt.filter(x=>x.direction==="in"),"amount"),receita_recebida:sum(rec,"received_amount")||sum(rec,"amount"),_key:key};
+ });
+ const reportRows=view==="year"?monthlyRows:[{competencia:fmtMonth(month),vendas_brutas:gross,descontos,taxas:fees,cancelamentos,vendas_liquidas:net,contas_lancadas:sum(payables,"amount"),contas_pagas:sum(paid,"amount"),contas_em_aberto:sum(pending,"amount"),despesas_bancarias:sum(bankOut,"amount"),entradas_bancarias:sum(bankIn,"amount"),receita_recebida:receivedTotal,_key:month}];
+ const exportRows=reportRows.map(({_key,...x})=>x);
+ const annualTotals=monthlyRows.reduce((a,r)=>{for(const k of ["vendas_brutas","descontos","taxas","cancelamentos","vendas_liquidas","contas_lancadas","contas_pagas","contas_em_aberto","despesas_bancarias","entradas_bancarias","receita_recebida"])a[k]=(a[k]||0)+r[k];return a;},{});
+ return <main className="content">
+  <div className="page-head"><div><h2>Relatórios financeiros</h2><p>Por competência, com recebimentos e movimentações de caixa apresentados separadamente.</p></div><button className="ghost" onClick={()=>downloadCSV(exportRows,"relatorio-financeiro-"+(view==="year"?year:month)+".csv")}><Download size={16}/>Exportar CSV</button></div>
+  <section className="panel">
+   <div className="filters" style={{alignItems:"end"}}>
+    <Field label="Período"><select value={view} onChange={e=>setView(e.target.value)}><option value="month">Competência mensal</option><option value="year">Ano — comparar os 12 meses</option></select></Field>
+    {view==="month"?<Field label="Competência"><input type="month" value={month} onChange={e=>setMonth(e.target.value)} /></Field>:<Field label="Ano"><select value={year} onChange={e=>setYear(e.target.value)}>{Array.from({length:8},(_,i)=>String(2026-i)).map(y=><option key={y} value={y}>{y}</option>)}</select></Field>}
+    <Field label="Banco para movimentações"><select value={bank} onChange={e=>setBank(e.target.value)}><option value="">Todos os bancos</option>{data.banks.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>
+   </div>
+  </section>
+  {view==="month"?<>
+   <div className="cards">
+    <div className="card"><span>Vendas brutas</span><strong>{money(gross)}</strong><small>Pedidos não cancelados</small></div>
+    <div className="card"><span>Descontos e cancelamentos</span><strong>{money(discounts+cancellations)}</strong><small>Descontos {money(discounts)} • Cancelamentos {money(cancellations)}</small></div>
+    <div className="card"><span>Taxas sobre vendas</span><strong>{money(fees)}</strong><small>Registradas nas vendas</small></div>
+    <div className="card"><span>Vendas líquidas</span><strong>{money(net)}</strong><small>Conforme os lançamentos de vendas</small></div>
+    <div className="card"><span>Contas pagas</span><strong>{money(sum(paid,"amount"))}</strong><small>Contas da competência selecionada</small></div>
+    <div className="card"><span>Contas em aberto</span><strong>{money(sum(pending,"amount"))}</strong><small>Não somadas às saídas bancárias</small></div>
+    <div className="card"><span>Despesas bancárias</span><strong>{money(sum(bankOut,"amount"))}</strong><small>Saídas registradas no banco, separadas das contas</small></div>
+    <div className="card"><span>Receita recebida</span><strong>{money(receivedTotal)}</strong><small>Considera a data real do recebimento</small></div>
+   </div>
+   <section className="panel"><h3>Detalhamento da competência — {fmtMonth(month)}</h3>
+    <div className="table-wrap"><table><thead><tr><th>Indicador</th><th>Valor</th><th>Critério</th></tr></thead><tbody>
+     <tr><td>Vendas brutas</td><td>{money(gross)}</td><td>Data de competência da venda</td></tr>
+     <tr><td>Descontos</td><td>{money(discounts)}</td><td>Registrados nas vendas</td></tr>
+     <tr><td>Taxas sobre vendas</td><td>{money(fees)}</td><td>Registradas nas vendas</td></tr>
+     <tr><td>Cancelamentos</td><td>{money(cancellations)}</td><td>Registrados nas vendas não canceladas</td></tr>
+     <tr><td>Vendas líquidas</td><td>{money(net)}</td><td>Não representa necessariamente dinheiro já recebido</td></tr>
+     <tr><td>Contas lançadas</td><td>{money(sum(payables,"amount"))}</td><td>Por competência; inclui pagas e em aberto</td></tr>
+     <tr><td>Contas pagas</td><td>{money(sum(paid,"amount"))}</td><td>Contas marcadas como pagas</td></tr>
+     <tr><td>Entradas bancárias</td><td>{money(sum(bankIn,"amount"))}</td><td>Movimentação financeira; não somar novamente às vendas</td></tr>
+     <tr><td>Saídas bancárias</td><td>{money(sum(bankOut,"amount"))}</td><td>Caixa/bancos; pode incluir pagamento de contas já listadas</td></tr>
+     <tr><td>Recebimentos efetivos</td><td>{money(receivedTotal)}</td><td>Data real do recebimento, separada da competência da venda</td></tr>
+    </tbody></table></div>
+   </section>
+  </>:<>
+   <div className="cards">
+    <div className="card"><span>Vendas brutas no ano</span><strong>{money(annualTotals.vendas_brutas||0)}</strong></div>
+    <div className="card"><span>Vendas líquidas no ano</span><strong>{money(annualTotals.vendas_liquidas||0)}</strong></div>
+    <div className="card"><span>Taxas sobre vendas</span><strong>{money(annualTotals.taxas||0)}</strong></div>
+    <div className="card"><span>Contas pagas por competência</span><strong>{money(annualTotals.contas_pagas||0)}</strong></div>
+   </div>
+   <section className="panel"><h3>Comparativo mensal — {year}</h3><p>Compare mês a mês. Vendas e contas são agrupadas pela competência; entradas e saídas bancárias e recebimentos usam seus registros de movimentação. Esses totais são separados para evitar dupla contagem.</p>
+    <div className="table-wrap"><table><thead><tr><th>Mês</th><th>Vendas brutas</th><th>Descontos</th><th>Taxas</th><th>Vendas líquidas</th><th>Contas pagas</th><th>Em aberto</th><th>Despesas bancárias</th><th>Entradas bancárias</th><th>Receita recebida</th></tr></thead><tbody>
+     {monthlyRows.map(r=><tr key={r._key}><td>{r.competencia}</td><td>{money(r.vendas_brutas)}</td><td>{money(r.descontos)}</td><td>{money(r.taxas)}</td><td>{money(r.vendas_liquidas)}</td><td>{money(r.contas_pagas)}</td><td>{money(r.contas_em_aberto)}</td><td>{money(r.despesas_bancarias)}</td><td>{money(r.entradas_bancarias)}</td><td>{money(r.receita_recebida)}</td></tr>)}
+     <tr><th>Total do ano</th><th>{money(annualTotals.vendas_brutas||0)}</th><th>{money(annualTotals.descontos||0)}</th><th>{money(annualTotals.taxas||0)}</th><th>{money(annualTotals.vendas_liquidas||0)}</th><th>{money(annualTotals.contas_pagas||0)}</th><th>{money(annualTotals.contas_em_aberto||0)}</th><th>{money(annualTotals.despesas_bancarias||0)}</th><th>{money(annualTotals.entradas_bancarias||0)}</th><th>{money(annualTotals.receita_recebida||0)}</th></tr>
+    </tbody></table></div>
+   </section>
+  </>}
+  <section className="panel"><h3>Conferência e qualidade dos dados</h3><p>Movimentos bancários não conciliados: <b>{(data.bankTx||[]).filter(x=>x.status==="unreconciled").length}</b>.</p><p>Contas a pagar pendentes no sistema: <b>{(data.payables||[]).filter(x=>x.status!=="paid").length}</b>.</p><p>Recebimentos pendentes no sistema: <b>{(data.receivables||[]).filter(x=>x.status!=="received").length}</b>.</p><p style={{fontSize:13,color:"var(--muted)"}}>Relatório somente de leitura: não cria, altera nem exclui lançamentos. Movimentos bancários não são somados às contas pagas para evitar contar o mesmo pagamento duas vezes.</p></section>
+ </main>
+}
 
 function Compras({data}){
  const [open,setOpen]=useState(false),[selected,setSelected]=useState(new Set()),[form,setForm]=useState({description:"",amount:"",fact_date:today(),competence_date:today(),supplier_id:"",payment_bank_account_id:"",status:"pending"});
@@ -477,8 +550,7 @@ function Conciliacao({data}){
    }catch(error){alert(error?.message||"Não foi possível conciliar o repasse.")}finally{setSaving(false)}
  }
  async function undoBatch(batch){
-   if(!confirm("Desfazer esta conciliação e devolver as vendas para pendente?"))return;
-   try{
+   if(!confirm("Desfazer esta conciliação e devolver as vendas para pendente?"))return;   try{
      const items=batch.reconciliation_batch_items||[];
      for(const item of items){
        await supabase.from("receivables").update({received_amount:0,received_date:null,status:"pending",bank_account_id:null}).eq("sale_id",item.sale_id).eq("user_id",data.user.id);
@@ -637,8 +709,7 @@ function useData(user){
  const filterText=x=>!search||JSON.stringify(x).toLowerCase().includes(search.toLowerCase());
  return {...state,reload,search,setSearch,bankFilter,setBankFilter,payFilter,setPayFilter,sales:state.sales.filter(filterText),bankTx:state.bankTx.filter(x=>(!bankFilter||x.bank_account_id===bankFilter)&&filterText(x)),payables:state.payables.filter(x=>(!payFilter||x.status===payFilter)&&filterText(x))};
 }
-export default function App(){
- const [user,setUser]=useState(null),[active,setActive]=useState("dashboard"),[mobile,setMobile]=useState(false),data=useData(user||{id:""});
+export default function App(){ const [user,setUser]=useState(null),[active,setActive]=useState("dashboard"),[mobile,setMobile]=useState(false),data=useData(user||{id:""});
  useEffect(()=>{if(!supabase)return;let mounted=true;supabase.auth.getSession().then(({data})=>{if(mounted&&data.session?.user){setUser(data.session.user);seedUser(data.session.user).catch(error=>console.warn("Erro ao preparar dados iniciais:",error))}});const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>{if(!mounted)return;setUser(s?.user??null);if(s?.user)seedUser(s.user).catch(error=>console.warn("Erro ao preparar dados iniciais:",error))});return()=>{mounted=false;subscription.unsubscribe()}},[]);
  async function logout(){await supabase?.auth.signOut();setUser(null)}
  if(!user)return <Login onLogin={setUser}/>;
