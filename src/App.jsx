@@ -157,8 +157,7 @@ function Vendas({data}){
    if(line.type==="pizza"){
      const p1=products.find(x=>x.id===line.product_id),p2=products.find(x=>x.id===line.flavor_2_product_id),b=products.find(x=>x.id===line.border_product_id);
      if(!p1||!line.size)return 0;
-     const a=priceFor(p1,line.size),pizza=p2?(a+priceFor(p2,line.size))/2:a;     return (pizza+(b?priceFor(b,line.size):0))*qty;
-   }
+     const a=priceFor(p1,line.size),pizza=p2?(a+priceFor(p2,line.size))/2:a;     return (pizza+(b?priceFor(b,line.size):0))*qty;   }
    const p=products.find(x=>x.id===line.product_id);
    if(!p)return 0;
    return (line.category==="Bordas Recheadas"?priceFor(p,line.size):Number(p.sale_price||0))*qty;
@@ -317,8 +316,7 @@ function Cartoes({data}){
   }finally{setLoading(false)}
  }
  useEffect(()=>{load()},[data.user.id]); const allSelected=rows.length>0&&rows.every(x=>selected.has(x.id));
- function toggleOne(id){setSelected(prev=>{const next=new Set(prev);next.has(id)?next.delete(id):next.add(id);return next})}
- function toggleAll(){setSelected(prev=>{const next=new Set(prev);if(allSelected)rows.forEach(x=>next.delete(x.id));else rows.forEach(x=>next.add(x.id));return next})}
+ function toggleOne(id){setSelected(prev=>{const next=new Set(prev);next.has(id)?next.delete(id):next.add(id);return next})} function toggleAll(){setSelected(prev=>{const next=new Set(prev);if(allSelected)rows.forEach(x=>next.delete(x.id));else rows.forEach(x=>next.add(x.id));return next})}
  async function removeSelected(){
   const ids=rows.filter(x=>selected.has(x.id)).map(x=>x.id);if(!ids.length)return;
   if(!confirm(`Excluir ${ids.length} compra(s) de cartão selecionada(s) e suas parcelas? Esta ação não poderá ser desfeita.`))return;
@@ -477,8 +475,7 @@ function Cardapio({data}){
  {Object.entries(grouped).map(([category,items])=><section className="panel" key={category}><div className="section-title"><h3>{category}</h3><span>{items.length} item(ns)</span></div><div className="table-wrap"><table><thead><tr><th>Selecionar</th><th>Produto</th><th>Descrição</th><th>P</th><th>M</th><th>G</th><th>F</th><th>Custo</th><th>Ações</th></tr></thead><tbody>{items.map(x=><tr key={x.id}><td><input aria-label="Selecionar item do cardápio" type="checkbox" checked={selected.has(x.id)} onChange={()=>toggleOne(x.id)}/></td><td><b>{x.name}</b></td><td>{x.description||"—"}</td><td>{x.price_p!=null?money(x.price_p):money(x.sale_price)}</td><td>{x.price_m!=null?money(x.price_m):"—"}</td><td>{x.price_g!=null?money(x.price_g):"—"}</td><td>{x.price_f!=null?money(x.price_f):"—"}</td><td>{money(x.cost_price)}</td><td><button className="icon-btn" title="Editar" onClick={()=>startEdit(x)}>✏️</button><button className="icon-btn" title="Desativar" onClick={()=>remove(x)}>🗑️</button></td></tr>)}</tbody></table></div></section>)}
  {!rows.length&&<section className="panel"><div className="empty-row">Nenhum item no cardápio.</div></section>}
  {open&&<Modal title={editing?"Editar item do cardápio":"Incluir item no cardápio"} onClose={()=>setOpen(false)}><form className="form-grid" onSubmit={save}>
- <Field label="Nome"><input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></Field>
- <Field label="Categoria"><select required value={form.category_id} onChange={e=>setForm({...form,category_id:e.target.value})}><option value="">Selecione</option>{data.categories.filter(x=>["Pizzas Tradicionais","Pizzas Especiais","Bebidas","Bordas Recheadas"].includes(x.name)).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>
+ <Field label="Nome"><input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></Field> <Field label="Categoria"><select required value={form.category_id} onChange={e=>setForm({...form,category_id:e.target.value})}><option value="">Selecione</option>{data.categories.filter(x=>["Pizzas Tradicionais","Pizzas Especiais","Bebidas","Bordas Recheadas"].includes(x.name)).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>
  <Field label="Descrição"><textarea rows="3" value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/></Field>
  {isSized?<><Field label="Preço P"><input type="number" step="0.01" value={form.price_p} onChange={e=>setForm({...form,price_p:e.target.value})}/></Field><Field label="Preço M"><input type="number" step="0.01" value={form.price_m} onChange={e=>setForm({...form,price_m:e.target.value})}/></Field><Field label="Preço G"><input type="number" step="0.01" value={form.price_g} onChange={e=>setForm({...form,price_g:e.target.value})}/></Field><Field label="Preço F"><input type="number" step="0.01" value={form.price_f} onChange={e=>setForm({...form,price_f:e.target.value})}/></Field></>:<Field label="Preço de venda"><input type="number" step="0.01" value={form.sale_price} onChange={e=>setForm({...form,sale_price:e.target.value})}/></Field>}
  <Field label="Custo"><input type="number" step="0.01" value={form.cost_price} onChange={e=>setForm({...form,cost_price:e.target.value})}/></Field>
@@ -637,8 +634,7 @@ function Dados({data}){
       </div>
       <button className="ghost" onClick={()=>downloadCSV(data.bankTx,"backup-extrato.csv")}><Download size={16}/>Backup CSV</button>
     </div>
-    <section className="panel">
-      <h3>Importar Excel / CSV</h3>
+    <section className="panel">      <h3>Importar Excel / CSV</h3>
       <div className="form-grid">
         <Field label="Origem">
           <select value={source} onChange={e=>setSource(e.target.value)}>
@@ -690,10 +686,10 @@ function useData(user){
    ["canais",()=>supabase.from("channels").select("*").eq("user_id",uid).eq("active",true).order("name")],
    ["fornecedores",()=>supabase.from("suppliers").select("*").eq("user_id",uid).eq("active",true).order("name")],
    ["cartões",()=>supabase.from("card_accounts").select("*").eq("user_id",uid).eq("active",true).order("name")],
-   ["vendas",()=>supabase.from("sales").select("*,channels(name),sale_items(*)").eq("user_id",uid).order("fact_date",{ascending:false}).limit(500)],
-   ["movimentos bancários",()=>supabase.from("bank_transactions").select("*,bank_accounts(name),categories(name)").eq("user_id",uid).order("fact_date",{ascending:false}).limit(500)],
-   ["contas a pagar",()=>supabase.from("payables").select("*,suppliers(name),categories(name)").eq("user_id",uid).order("due_date",{ascending:true}).limit(500)],
-   ["recebimentos",()=>supabase.from("receivables").select("*").eq("user_id",uid).order("expected_date",{ascending:true}).limit(500)],
+   ["vendas",()=>supabase.from("sales").select("*,channels(name),sale_items(*)").eq("user_id",uid).order("fact_date",{ascending:false}).limit(5000)],
+   ["movimentos bancários",()=>supabase.from("bank_transactions").select("*,bank_accounts(name),categories(name)").eq("user_id",uid).order("fact_date",{ascending:false}).limit(5000)],
+   ["contas a pagar",()=>supabase.from("payables").select("*,suppliers(name),categories(name)").eq("user_id",uid).order("due_date",{ascending:true}).limit(5000)],
+   ["recebimentos",()=>supabase.from("receivables").select("*").eq("user_id",uid).order("expected_date",{ascending:true}).limit(5000)],
    ["produtos",()=>supabase.from("products").select("*,categories(name)").eq("user_id",uid).eq("active",true).order("name")],
    ["compras",()=>supabase.from("purchases").select("*,suppliers(name),categories(name)").eq("user_id",uid).order("fact_date",{ascending:false}).limit(500)]
   ];
