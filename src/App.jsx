@@ -510,6 +510,35 @@ function Conciliacao({data}){
  }).sort((a,b)=>String(b.fact_date||"").localeCompare(String(a.fact_date||"")));
  const selected=availableSales.filter(s=>selectedSales.includes(s.id));
  const salesNet=selected.reduce((sum,s)=>sum+Number(s.net_amount||0),0);
+ function suggestWeeklySales(){
+   if(!tx)return alert("Selecione primeiro o depósito bancário.");
+   if(tx.direction!=="in")return alert("A sugestão de repasse funciona para entradas bancárias.");
+   const payoutDate=String(tx.fact_date||"").slice(0,10);
+   if(!/^\d{4}-\d{2}-\d{2}$/.test(payoutDate))return alert("Não consegui identificar a data do depósito.");
+   const payoutDay=new Date(payoutDate+"T12:00:00");
+   const day=payoutDay.getDay();
+   const daysSinceMonday=(day+6)%7;
+   const currentMonday=new Date(payoutDay);currentMonday.setDate(payoutDay.getDate()-daysSinceMonday);
+   const weekStart=new Date(currentMonday);weekStart.setDate(currentMonday.getDate()-7);
+   const weekEnd=new Date(currentMonday);weekEnd.setDate(currentMonday.getDate()-1);
+   const toKey=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+   const start=toKey(weekStart),end=toKey(weekEnd);
+   const hint=normalizeHeader((tx.description||"")+" "+(tx.bank_accounts?.name||""));
+   const channelHints=["ifood","beefood","99food","whatsapp","direto"];
+   const detected=channelHints.find(name=>hint.includes(normalizeHeader(name)));
+   const detectedChannel=detected?data.channels.find(c=>normalizeHeader(c.name).includes(normalizeHeader(detected))):null;
+   const candidates=(data.sales||[]).filter(s=>{
+     const date=String(s.fact_date||s.competence_date||"").slice(0,10);
+     if(!date||date<start||date>end||s.status==="cancelled"||usedSaleIds.has(s.id)||!(Number(s.net_amount||0)>0))return false;
+     if(detectedChannel&&s.channel_id!==detectedChannel.id)return false;
+     return true;
+   }).sort((a,b)=>String(a.fact_date||"").localeCompare(String(b.fact_date||"")));
+   if(!candidates.length)return alert("Não encontrei vendas líquidas não conciliadas de "+start+" a "+end+(detectedChannel?" no canal "+detectedChannel.name:"")+". Confira o canal e se as vendas dessa semana foram importadas.");
+   setChannelFilter(detectedChannel?.name||"");
+   setSelectedSales(candidates.map(s=>s.id));
+   setFees("0");setAdjustments("0");
+   alert("Sugestão carregada para "+start+" a "+end+": "+candidates.length+" venda(s), líquido total de "+money(candidates.reduce((sum,s)=>sum+Number(s.net_amount||0),0))+". Confira o valor esperado e a diferença antes de confirmar. "+(detectedChannel?"Canal identificado: "+detectedChannel.name+".":"Não identifiquei o canal pelo extrato; revise as vendas selecionadas."));
+ }
  const feeValue=Number(fees||0);
  const adjustmentValue=Number(adjustments||0);
  const expectedNet=salesNet-feeValue+adjustmentValue;
@@ -597,6 +626,7 @@ function Conciliacao({data}){
      <div><b>{money(expectedNet)}</b><span>valor esperado</span></div>
      <div><b>{money(difference)}</b><span>diferença banco × esperado</span></div>
     </div>
+    {tx&&<div className="actions" style={{marginTop:16}}><button className="ghost" disabled={saving} onClick={suggestWeeklySales}>Sugerir vendas da semana anterior</button><span style={{fontSize:13,color:"var(--muted)"}}>Para repasses de quarta-feira, sugere vendas de segunda a domingo da semana anterior. É uma sugestão; revise os valores antes de vincular.</span></div>}
     <div className="table-wrap" style={{marginTop:16}}><table><thead><tr><th></th><th>Data</th><th>Canal</th><th>Descrição</th><th>Bruto</th><th>Taxas</th><th>Líquido</th></tr></thead><tbody>{saleRows}{!availableSales.length&&<EmptyRow text="Nenhuma venda disponível para vincular. As vendas diretas também aparecem aqui."/>}</tbody></table></div>
     <div className="actions" style={{marginTop:16}}><button className="primary" disabled={saving||!selected.length||!tx} onClick={createBatch}>{saving?"Conciliando...":"Vincular venda(s) e conferir entrada"}</button><button className="ghost" onClick={clearSelection}>Limpar</button></div>
     {tx&&<p className={Math.abs(difference)<=0.01?"success":"error"} style={{marginTop:12}}>{Math.abs(difference)<=0.01?"Fechamento conferido: o valor do banco bate com o esperado.":"Atenção: o banco e as vendas selecionadas têm uma diferença de "+money(difference)+"."}</p>}
