@@ -375,7 +375,7 @@ function Caixa({data}){const [bank,setBank]=useState(""),[from,setFrom]=useState
 function Relatorios({data}){
  const now=new Date();
  const currentMonth=String(now.getFullYear())+"-"+String(now.getMonth()+1).padStart(2,"0");
- const [view,setView]=useState("month"),[month,setMonth]=useState(currentMonth),[year,setYear]=useState(String(now.getFullYear())),[bank,setBank]=useState(""),[paymentMethod,setPaymentMethod]=useState(""),[channelFilter,setChannelFilter]=useState(""),[nameFilter,setNameFilter]=useState("");
+ const [view,setView]=useState("month"),[reportMenu,setReportMenu]=useState(true),[month,setMonth]=useState(currentMonth),[year,setYear]=useState(String(now.getFullYear())),[bank,setBank]=useState(""),[paymentMethod,setPaymentMethod]=useState(""),[channelFilter,setChannelFilter]=useState(""),[nameFilter,setNameFilter]=useState("");
  const monthKey=x=>String(x?.competence_date||x?.fact_date||x?.due_date||x?.expected_date||"").slice(0,7);
  const cashMonth=x=>String(x?.received_date||x?.payment_date||x?.fact_date||"").slice(0,7);
  const inRange=key=>view==="year"?key.startsWith(year):key===month;
@@ -433,8 +433,29 @@ function Relatorios({data}){
    else rows=reportRows.map(({_key,...x})=>x);
    downloadCSV(rows,"relatorio-"+view+"-"+(view==="year"?year:month)+".csv");
  }
+ const reportOptions=[
+  {id:"month",icon:"📅",title:"Relatório mensal",description:"Resumo da competência, vendas, custos, contas e recebimentos."},
+  {id:"year",icon:"📊",title:"Comparativo anual",description:"Compare os 12 meses do ano selecionado."},
+  {id:"sales",icon:"🍕",title:"Vendas por plataforma / canal",description:"iFood, BeeFood, WhatsApp, 99Food e vendas diretas."},
+  {id:"revenue",icon:"💰",title:"Receitas brutas e líquidas",description:"Vendas brutas, descontos, taxas, líquidas e recebidas."},
+  {id:"payables",icon:"🧾",title:"Contas a pagar",description:"Contas pagas e pendentes, vencimentos e fornecedores."},
+  {id:"expenses",icon:"💸",title:"Despesas",description:"Despesas por categoria, descrição, valor e situação."},
+  {id:"financial",icon:"🏦",title:"Bancos e extratos",description:"Entradas, saídas, bancos e situação da conciliação."},
+  {id:"purchases",icon:"🛒",title:"Compras / matéria-prima",description:"Compras, fornecedores, valores e pagamentos."},
+  {id:"other",icon:"📂",title:"Outros lançamentos",description:"Movimentações bancárias classificadas como outros."},
+  {id:"payments",icon:"💳",title:"Formas de pagamento",description:"Compare vendas e recebimentos por forma de pagamento."},
+  {id:"operational",icon:"🍽️",title:"Produtos mais vendidos",description:"Ranking dos produtos e quantidades vendidas."}
+ ];
+ if(reportMenu)return <main className="content">
+  <div className="page-head"><div><h2>Relatórios</h2><p>Escolha o relatório que deseja consultar. Os filtros aparecem dentro de cada relatório.</p></div></div>
+  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(235px,1fr))",gap:16,alignItems:"stretch"}}>
+   {reportOptions.map(option=><button key={option.id} type="button" onClick={()=>{setView(option.id);setReportMenu(false)}} className="panel" style={{textAlign:"left",cursor:"pointer",border:"1px solid var(--border, #e5e7eb)",display:"flex",flexDirection:"column",gap:10,minHeight:145,background:"var(--panel, #fff)",color:"inherit",font:"inherit",transition:"transform .15s, box-shadow .15s"}} onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 22px rgba(0,0,0,.08)"}} onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="none"}}>
+    <span style={{fontSize:28}}>{option.icon}</span><strong style={{fontSize:16}}>{option.title}</strong><span style={{fontSize:13,color:"var(--muted)",lineHeight:1.5}}>{option.description}</span><span style={{marginTop:"auto",fontSize:13,fontWeight:600}}>Abrir relatório →</span>
+   </button>)}
+  </div>
+ </main>;
  return <main className="content">
-  <div className="page-head"><div><h2>Relatórios</h2><p>Relatórios mensais, comparativo anual, financeiro/bancário e operacional com dados reais.</p></div><button className="ghost" onClick={exportCurrent}><Download size={16}/>Exportar CSV</button></div>
+  <div className="page-head"><div><h2>Relatórios</h2><p>Consulte os dados e ajuste os filtros abaixo para refinar o resultado.</p></div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="ghost" onClick={()=>setReportMenu(true)}>← Todos os relatórios</button><button className="ghost" onClick={exportCurrent}><Download size={16}/>Exportar CSV</button></div></div>
   <section className="panel"><div className="filters" style={{alignItems:"end"}}>
    <Field label="Tipo de relatório"><select value={view} onChange={e=>setView(e.target.value)}><option value="month">Mensal — competência</option><option value="year">Anual — comparar 12 meses</option><option value="financial">Financeiro e bancário</option><option value="sales">Vendas por plataforma/canal</option><option value="revenue">Receitas — brutas e líquidas</option><option value="payables">Contas a pagar</option><option value="expenses">Despesas</option><option value="purchases">Compras / matéria-prima</option><option value="other">Outros lançamentos bancários</option><option value="payments">Recebimentos por forma de pagamento</option><option value="operational">Operacional — produtos vendidos</option></select></Field>
    {view==="year"?<Field label="Ano"><select value={year} onChange={e=>setYear(e.target.value)}>{Array.from({length:8},(_,i)=>String(now.getFullYear()-i)).map(y=><option key={y} value={y}>{y}</option>)}</select></Field>:<Field label="Competência"><input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></Field>}
