@@ -401,7 +401,7 @@ function Relatorios({data}){
    const rows=sales.filter(x=>x.payment_method===method);
    const methodReceived=received.filter(r=>rows.some(s=>s.id===r.sale_id));
    return {method,count:rows.length,gross:sum(rows,"gross_amount"),net:sum(rows,"net_amount"),received:sum(methodReceived,"received_amount")||sum(methodReceived,"amount")};
- }).filter(x=>!paymentMethod||x.method===paymentMethod);
+ }).filter(x=>!paymentMethod||normText(x.method).includes(normText(paymentMethod)));
  const productRows={};
  sales.forEach(s=>(s.sale_items||[]).forEach(i=>{
    const name=i.product_name||"Item sem nome";
