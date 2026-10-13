@@ -397,6 +397,12 @@ function Relatorios({data}){
  const purchasesPaid=purchases.filter(x=>x.status==="paid").reduce((a,x)=>a+Number(x.amount||0),0);
  const resultEstimated=net-expensePaid-purchasesPaid;
  const methods=[...new Set((data.sales||[]).map(x=>x.payment_method).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
+ const nameOptions=[...new Set([
+  ...(data.sales||[]).flatMap(x=>[x.customer_name,x.external_id,x.channels?.name]),
+  ...(data.payables||[]).flatMap(x=>[x.description,x.suppliers?.name,x.categories?.name,x.status]),
+  ...(data.purchases||[]).flatMap(x=>[x.description,x.suppliers?.name,x.categories?.name,x.status]),
+  ...(data.bankTx||[]).flatMap(x=>[x.description,x.classification,x.bank_accounts?.name,x.direction,x.status])
+ ].map(v=>String(v||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
  const byPayment=methods.map(method=>{
    const rows=sales.filter(x=>x.payment_method===method);
    const methodReceived=received.filter(r=>rows.some(s=>s.id===r.sale_id));
@@ -461,8 +467,8 @@ function Relatorios({data}){
    {view==="year"?<Field label="Ano"><select value={year} onChange={e=>setYear(e.target.value)}>{Array.from({length:8},(_,i)=>String(now.getFullYear()-i)).map(y=><option key={y} value={y}>{y}</option>)}</select></Field>:<Field label="Competência"><input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></Field>}
    {(view==="financial"||view==="year"||view==="other")&&<Field label="Banco"><select value={bank} onChange={e=>setBank(e.target.value)}><option value="">Todos os bancos</option>{data.banks.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>}
     {(view==="sales"||view==="revenue")&&<Field label="Plataforma / canal"><select value={channelFilter} onChange={e=>setChannelFilter(e.target.value)}><option value="">Todos os canais</option>{data.channels.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>}
-    <Field label="Filtrar por nome"><input value={nameFilter} onChange={e=>setNameFilter(e.target.value)} placeholder="Nome, descrição, cliente..." /></Field>
-   {(view==="month"||view==="payments"||view==="operational"||view==="sales"||view==="revenue")&&<Field label="Forma de pagamento — pesquisar nome"><input value={paymentMethod} onChange={e=>setPaymentMethod(e.target.value)} placeholder="Digite PIX, dinheiro, cartão..." /></Field>}
+    <Field label="Filtrar por nome"><select value={nameFilter} onChange={e=>setNameFilter(e.target.value)}><option value="">Todos os nomes</option>{nameOptions.map(name=><option key={name} value={name}>{name}</option>)}</select></Field>
+   {(view==="month"||view==="payments"||view==="operational"||view==="sales"||view==="revenue")&&<Field label="Forma de pagamento"><select value={paymentMethod} onChange={e=>setPaymentMethod(e.target.value)}><option value="">Todas as formas</option>{methods.map(method=><option key={method} value={method}>{method}</option>)}</select></Field>}
   </div></section>
   {view==="month"?<>
    <div className="cards">
