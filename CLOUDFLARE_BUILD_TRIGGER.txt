@@ -1,6 +1,5 @@
 Build trigger for Cloudflare Workers.
-2026-10-07
+Deploy solicitado após correção da tela Relatórios.
+2026-10-13
 
 Supabase variables configured for automatic Cloudflare build.
-
-Finalizacao automatica.
