@@ -377,23 +377,25 @@ function Relatorios({data}){
  const monthKey=x=>String(x?.competence_date||x?.fact_date||x?.due_date||x?.expected_date||"").slice(0,7);
  const cashMonth=x=>String(x?.received_date||x?.payment_date||x?.fact_date||"").slice(0,7);
  const inRange=(key)=>view==="year"?key.startsWith(year):key===month;
- const sales=(data.sales||[]).filter(x=>x.status!=="cancelled"&&inRange(monthKey(x)));
+ const salesAll=(data.sales||[]).filter(x=>inRange(monthKey(x)));
+ const sales=salesAll.filter(x=>x.status!=="cancelled");
  const payables=(data.payables||[]).filter(x=>inRange(monthKey(x)));
- const bankTx=(data.bankTx||[]).filter(x=>(!bank||x.bank_account_id===bank)&&inRange(monthKey(x)));
+ const bankTx=(data.bankTx||[]).filter(x=>(!bank||x.bank_account_id===bank)&&inRange(String(x?.fact_date||"").slice(0,7)));
  const received=(data.receivables||[]).filter(x=>x.status==="received"&&inRange(cashMonth(x)));
  const sum=(rows,field)=>rows.reduce((total,x)=>total+Number(x?.[field]||0),0);
- const gross=sum(sales,"gross_amount"),discounts=sum(sales,"discounts"),fees=sum(sales,"fees"),cancellations=sum(sales,"cancellations"),net=sum(sales,"net_amount");
+ const gross=sum(sales,"gross_amount"),discounts=sum(sales,"discounts"),fees=sum(sales,"fees"),cancellations=sum(salesAll,"cancellations"),net=sum(sales,"net_amount");
  const paid=payables.filter(x=>x.status==="paid"),pending=payables.filter(x=>x.status!=="paid");
  const bankIn=bankTx.filter(x=>x.direction==="in"),bankOut=bankTx.filter(x=>x.direction==="out");
  const receivedTotal=received.reduce((a,x)=>a+Number(x.received_amount??x.amount??0),0);
  const fmtMonth=key=>{const [y,m]=key.split("-");return new Date(Number(y),Number(m)-1,1).toLocaleDateString("pt-BR",{month:"long",year:"numeric"})};
  const monthlyRows=Array.from({length:12},(_,i)=>{
    const key=year+"-"+String(i+1).padStart(2,"0");
-   const s=(data.sales||[]).filter(x=>x.status!=="cancelled"&&monthKey(x)===key);
+   const allSales=(data.sales||[]).filter(x=>monthKey(x)===key);
+   const s=allSales.filter(x=>x.status!=="cancelled");
    const p=(data.payables||[]).filter(x=>monthKey(x)===key);
-   const bt=(data.bankTx||[]).filter(x=>(!bank||x.bank_account_id===bank)&&monthKey(x)===key);
+   const bt=(data.bankTx||[]).filter(x=>(!bank||x.bank_account_id===bank)&&String(x?.fact_date||"").slice(0,7)===key);
    const rec=(data.receivables||[]).filter(x=>x.status==="received"&&cashMonth(x)===key);
-   return {competencia:fmtMonth(key),vendas_brutas:sum(s,"gross_amount"),descontos:sum(s,"discounts"),taxas:sum(s,"fees"),cancelamentos:sum(s,"cancellations"),vendas_liquidas:sum(s,"net_amount"),contas_lancadas:sum(p,"amount"),contas_pagas:sum(p.filter(x=>x.status==="paid"),"amount"),contas_em_aberto:sum(p.filter(x=>x.status!=="paid"),"amount"),despesas_bancarias:sum(bt.filter(x=>x.direction==="out"),"amount"),entradas_bancarias:sum(bt.filter(x=>x.direction==="in"),"amount"),receita_recebida:sum(rec,"received_amount")||sum(rec,"amount"),_key:key};
+   return {competencia:fmtMonth(key),vendas_brutas:sum(s,"gross_amount"),descontos:sum(s,"discounts"),taxas:sum(s,"fees"),cancelamentos:sum(allSales,"cancellations"),vendas_liquidas:sum(s,"net_amount"),contas_lancadas:sum(p,"amount"),contas_pagas:sum(p.filter(x=>x.status==="paid"),"amount"),contas_em_aberto:sum(p.filter(x=>x.status!=="paid"),"amount"),despesas_bancarias:sum(bt.filter(x=>x.direction==="out"),"amount"),entradas_bancarias:sum(bt.filter(x=>x.direction==="in"),"amount"),receita_recebida:sum(rec,"received_amount")||sum(rec,"amount"),_key:key};
  });
  const reportRows=view==="year"?monthlyRows:[{competencia:fmtMonth(month),vendas_brutas:gross,descontos,taxas:fees,cancelamentos,vendas_liquidas:net,contas_lancadas:sum(payables,"amount"),contas_pagas:sum(paid,"amount"),contas_em_aberto:sum(pending,"amount"),despesas_bancarias:sum(bankOut,"amount"),entradas_bancarias:sum(bankIn,"amount"),receita_recebida:receivedTotal,_key:month}];
  const exportRows=reportRows.map(({_key,...x})=>x);
@@ -423,7 +425,7 @@ function Relatorios({data}){
      <tr><td>Vendas brutas</td><td>{money(gross)}</td><td>Data de competência da venda</td></tr>
      <tr><td>Descontos</td><td>{money(discounts)}</td><td>Registrados nas vendas</td></tr>
      <tr><td>Taxas sobre vendas</td><td>{money(fees)}</td><td>Registradas nas vendas</td></tr>
-     <tr><td>Cancelamentos</td><td>{money(cancellations)}</td><td>Registrados nas vendas não canceladas</td></tr>
+     <tr><td>Cancelamentos</td><td>{money(cancellations)}</td><td>Campo de cancelamentos de todas as vendas da competência, inclusive registros cancelados</td></tr>
      <tr><td>Vendas líquidas</td><td>{money(net)}</td><td>Não representa necessariamente dinheiro já recebido</td></tr>
      <tr><td>Contas lançadas</td><td>{money(sum(payables,"amount"))}</td><td>Por competência; inclui pagas e em aberto</td></tr>
      <tr><td>Contas pagas</td><td>{money(sum(paid,"amount"))}</td><td>Contas marcadas como pagas</td></tr>
@@ -446,7 +448,7 @@ function Relatorios({data}){
     </tbody></table></div>
    </section>
   </>}
-  <section className="panel"><h3>Conferência e qualidade dos dados</h3><p>Movimentos bancários não conciliados: <b>{(data.bankTx||[]).filter(x=>x.status==="unreconciled").length}</b>.</p><p>Contas a pagar pendentes no sistema: <b>{(data.payables||[]).filter(x=>x.status!=="paid").length}</b>.</p><p>Recebimentos pendentes no sistema: <b>{(data.receivables||[]).filter(x=>x.status!=="received").length}</b>.</p><p style={{fontSize:13,color:"var(--muted)"}}>Relatório somente de leitura: não cria, altera nem exclui lançamentos. Movimentos bancários não são somados às contas pagas para evitar contar o mesmo pagamento duas vezes.</p></section>
+  <section className="panel"><h3>Conferência e qualidade dos dados</h3><p>Movimentos bancários não conciliados no sistema: <b>{(data.bankTx||[]).filter(x=>x.status==="unreconciled").length}</b>.</p><p>Contas a pagar pendentes no sistema: <b>{(data.payables||[]).filter(x=>x.status!=="paid"&&x.status!=="cancelled").length}</b>.</p><p>Recebimentos pendentes no sistema: <b>{(data.receivables||[]).filter(x=>x.status!=="received"&&x.status!=="cancelled").length}</b>.</p><p style={{fontSize:13,color:"var(--muted)"}}>Relatório somente de leitura: não cria, altera nem exclui lançamentos. Movimentos bancários não são somados às contas pagas para evitar contar o mesmo pagamento duas vezes.</p></section>
  </main>
 }
 
