@@ -388,7 +388,7 @@ function Relatorios({data}){
  const bankTx=(data.bankTx||[]).filter(x=>(!bank||x.bank_account_id===bank)&&inRange(String(x?.fact_date||"").slice(0,7)));
  const received=(data.receivables||[]).filter(x=>x.status==="received"&&inRange(cashMonth(x)));
  const pendingReceivables=(data.receivables||[]).filter(x=>inRange(monthKey(x))&&x.status!=="received"&&x.status!=="cancelled");
- const gross=sum(sales,"gross_amount"),discounts=sum(sales,"discounts"),fees=sum(sales,"fees"),cancellations=sum(salesAll,"cancellations"),net=sum(sales,"net_amount");
+ const gross=sum(sales,"gross_amount"),discountTotal=sum(sales,"discounts"),fees=sum(sales,"fees"),cancellations=sum(salesAll,"cancellations"),net=sum(sales,"net_amount");
  const paid=payables.filter(x=>x.status==="paid"),pending=payables.filter(x=>x.status!=="paid"&&x.status!=="cancelled");
  const bankIn=bankTx.filter(x=>x.direction==="in"),bankOut=bankTx.filter(x=>x.direction==="out");
  const receivedTotal=received.reduce((a,x)=>a+Number(x.received_amount??x.amount??0),0);
@@ -440,7 +440,7 @@ function Relatorios({data}){
   {view==="month"?<>
    <div className="cards">
     <div className="card"><span>Vendas brutas</span><strong>{money(gross)}</strong><small>Vendas não canceladas da competência</small></div>
-    <div className="card"><span>Descontos</span><strong>{money(discounts)}</strong><small>Descontos lançados nas vendas</small></div>
+    <div className="card"><span>Descontos</span><strong>{money(discountTotal)}</strong><small>Descontos lançados nas vendas</small></div>
     <div className="card"><span>Taxas</span><strong>{money(fees)}</strong><small>Taxas registradas nas vendas</small></div>
     <div className="card"><span>Cancelamentos</span><strong>{money(cancellations)}</strong><small>Registros de cancelamento da competência</small></div>
     <div className="card"><span>Vendas líquidas</span><strong>{money(net)}</strong><small>Não significa necessariamente dinheiro recebido</small></div>
@@ -455,7 +455,7 @@ function Relatorios({data}){
     <tr><td>Resultado estimado antes de outros custos</td><td>{money(resultEstimated)}</td><td>Vendas líquidas menos despesas pagas e compras pagas; confira duplicidade caso uma compra também tenha sido lançada como conta a pagar</td></tr>
    </tbody></table></div></section>
    <section className="panel"><h3>Detalhamento da competência</h3><div className="table-wrap"><table><thead><tr><th>Indicador</th><th>Valor</th><th>Critério</th></tr></thead><tbody>
-    <tr><td>Vendas brutas</td><td>{money(gross)}</td><td>Competência da venda</td></tr><tr><td>Descontos</td><td>{money(discounts)}</td><td>Campo de descontos das vendas</td></tr><tr><td>Taxas sobre vendas</td><td>{money(fees)}</td><td>Campo de taxas das vendas</td></tr><tr><td>Cancelamentos</td><td>{money(cancellations)}</td><td>Registros de cancelamento no período</td></tr><tr><td>Vendas líquidas</td><td>{money(net)}</td><td>Separadas de recebimentos efetivos</td></tr><tr><td>Contas lançadas</td><td>{money(sum(payables,"amount"))}</td><td>Contas da competência, pagas e pendentes</td></tr><tr><td>Entradas bancárias</td><td>{money(sum(bankIn,"amount"))}</td><td>Movimentações na data efetiva, não somadas às vendas</td></tr><tr><td>Saídas bancárias</td><td>{money(sum(bankOut,"amount"))}</td><td>Movimentações na data efetiva, separadas das contas</td></tr><tr><td>Recebimentos efetivos</td><td>{money(receivedTotal)}</td><td>Data de recebimento registrada</td></tr><tr><td>A receber pendente</td><td>{money(sum(pendingReceivables,"amount")-sum(pendingReceivables,"received_amount"))}</td><td>Saldo pendente vinculado à competência</td></tr>
+    <tr><td>Vendas brutas</td><td>{money(gross)}</td><td>Competência da venda</td></tr><tr><td>Descontos</td><td>{money(discountTotal)}</td><td>Campo de descontos das vendas</td></tr><tr><td>Taxas sobre vendas</td><td>{money(fees)}</td><td>Campo de taxas das vendas</td></tr><tr><td>Cancelamentos</td><td>{money(cancellations)}</td><td>Registros de cancelamento no período</td></tr><tr><td>Vendas líquidas</td><td>{money(net)}</td><td>Separadas de recebimentos efetivos</td></tr><tr><td>Contas lançadas</td><td>{money(sum(payables,"amount"))}</td><td>Contas da competência, pagas e pendentes</td></tr><tr><td>Entradas bancárias</td><td>{money(sum(bankIn,"amount"))}</td><td>Movimentações na data efetiva, não somadas às vendas</td></tr><tr><td>Saídas bancárias</td><td>{money(sum(bankOut,"amount"))}</td><td>Movimentações na data efetiva, separadas das contas</td></tr><tr><td>Recebimentos efetivos</td><td>{money(receivedTotal)}</td><td>Data de recebimento registrada</td></tr><tr><td>A receber pendente</td><td>{money(sum(pendingReceivables,"amount")-sum(pendingReceivables,"received_amount"))}</td><td>Saldo pendente vinculado à competência</td></tr>
    </tbody></table></div></section>
   </>:view==="year"?<>
    <div className="cards"><div className="card"><span>Vendas brutas no ano</span><strong>{money(annualTotals.vendas_brutas||0)}</strong></div><div className="card"><span>Vendas líquidas no ano</span><strong>{money(annualTotals.vendas_liquidas||0)}</strong></div><div className="card"><span>Taxas no ano</span><strong>{money(annualTotals.taxas||0)}</strong></div><div className="card"><span>Contas pagas</span><strong>{money(annualTotals.contas_pagas||0)}</strong></div></div>
