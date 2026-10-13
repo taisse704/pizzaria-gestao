@@ -124,14 +124,24 @@ function Login({onLogin}){
 }
 
 function Dashboard({data}){
- const {sales,payables,receivables,bankTx}=data;
- const receita=sales.reduce((a,x)=>a+Number(x.net_amount||0),0), despesas=payables.filter(x=>x.status!=="paid").reduce((a,x)=>a+Number(x.amount||0),0);
- const aReceber=receivables.filter(x=>x.status!=="received").reduce((a,x)=>a+Number(x.amount||0)-Number(x.received_amount||0),0);
- const saldo=bankTx.reduce((a,x)=>a+(x.direction==="in"?Number(x.amount):-Number(x.amount)),0);
- return <main className="content"><div className="page-head"><div><h2>Dashboard</h2><p>Visão geral por competência — {new Date().toLocaleDateString("pt-BR",{month:"long",year:"numeric"})}.</p></div></div>
- <div className="cards"><div className="card"><span>Receita líquida</span><strong>{money(receita)}</strong><small>Vendas do período</small></div><div className="card"><span>Contas a pagar</span><strong>{money(despesas)}</strong><small>Pendências</small></div><div className="card"><span>A receber</span><strong>{money(aReceber)}</strong><small>Valores pendentes</small></div><div className="card"><span>Movimentação bancária</span><strong>{money(saldo)}</strong><small>Entradas menos saídas</small></div></div>
- <section className="panel"><div className="section-title"><h3>Resumo operacional</h3><button className="ghost" onClick={data.reload}><RefreshCw size={16}/>Atualizar</button></div>
- <div className="summary-grid"><div><b>{sales.length}</b><span>vendas</span></div><div><b>{payables.filter(x=>x.status==="pending").length}</b><span>contas pendentes</span></div><div><b>{receivables.filter(x=>x.status!=="received").length}</b><span>recebimentos pendentes</span></div><div><b>{bankTx.filter(x=>x.status==="unreconciled").length}</b><span>movimentos a conferir</span></div></div></section></main>
+ const now=new Date();
+ const currentMonth=String(now.getFullYear())+"-"+String(now.getMonth()+1).padStart(2,"0");
+ const monthOf=x=>String(x?.competence_date||x?.fact_date||x?.due_date||x?.expected_date||"").slice(0,7);
+ const cashMonthOf=x=>String(x?.fact_date||x?.received_date||x?.payment_date||"").slice(0,7);
+ const sales=(data.sales||[]).filter(x=>monthOf(x)===currentMonth&&x.status!=="cancelled");
+ const payables=(data.payables||[]).filter(x=>monthOf(x)===currentMonth);
+ const receivables=(data.receivables||[]).filter(x=>monthOf(x)===currentMonth);
+ const bankTx=(data.bankTx||[]).filter(x=>(x?.fact_date||"").slice(0,7)===currentMonth);
+ const receita=sales.reduce((a,x)=>a+Number(x.net_amount||0),0);
+ const despesas=payables.filter(x=>x.status!=="paid"&&x.status!=="cancelled").reduce((a,x)=>a+Math.max(0,Number(x.amount||0)-Number(x.paid_amount||0)),0);
+ const aReceber=receivables.filter(x=>x.status!=="received"&&x.status!=="cancelled").reduce((a,x)=>a+Math.max(0,Number(x.amount||0)-Number(x.received_amount||0)),0);
+ const saldo=bankTx.reduce((a,x)=>a+(x.direction==="in"?Number(x.amount||0):x.direction==="out"?-Number(x.amount||0):0),0);
+ const monthLabel=now.toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
+ return <main className="content"><div className="page-head"><div><h2>Dashboard</h2><p>Visão geral por competência — {monthLabel}.</p></div></div>
+ <div className="cards"><div className="card"><span>Receita líquida</span><strong>{money(receita)}</strong><small>Vendas não canceladas da competência</small></div><div className="card"><span>Contas a pagar</span><strong>{money(despesas)}</strong><small>Saldo pendente da competência</small></div><div className="card"><span>A receber</span><strong>{money(aReceber)}</strong><small>Saldo pendente da competência</small></div><div className="card"><span>Movimentação bancária</span><strong>{money(saldo)}</strong><small>Entradas menos saídas no mês</small></div></div>
+ <section className="panel"><div className="section-title"><h3>Resumo operacional — {monthLabel}</h3><button className="ghost" onClick={data.reload}><RefreshCw size={16}/>Atualizar</button></div>
+ <div className="summary-grid"><div><b>{sales.length}</b><span>vendas</span></div><div><b>{payables.filter(x=>x.status==="pending"||x.status==="overdue"||x.status==="partial").length}</b><span>contas pendentes</span></div><div><b>{receivables.filter(x=>x.status!=="received"&&x.status!=="cancelled").length}</b><span>recebimentos pendentes</span></div><div><b>{bankTx.filter(x=>x.status==="unreconciled").length}</b><span>movimentos a conferir</span></div></div>
+ <p style={{fontSize:13,color:"var(--muted)"}}>Os indicadores acima consideram a competência selecionada no painel. Recebimentos e pagamentos efetivos devem ser conferidos pelos relatórios de caixa e bancos.</p></section></main>
 }
 
 function Vendas({data}){
