@@ -330,7 +330,7 @@ function Contas({data}){
 }
 
 function Cadastros({data}){
- const [tab,setTab]=useState("banks"),[editing,setEditing]=useState(null),[saving,setSaving]=useState(false),[message,setMessage]=useState("");
+ const [tab,setTab]=useState("banks"),[editing,setEditing]=useState(null),[formOpen,setFormOpen]=useState(false),[saving,setSaving]=useState(false),[message,setMessage]=useState("");
  const emptyForm={name:"",institution:"",account_type:"bank",opening_balance:"0",closing_day:"",due_day:"",classification:"Despesas",document:"",phone:"",email:""};
  const [form,setForm]=useState(emptyForm);
  const configs={
@@ -341,9 +341,9 @@ function Cadastros({data}){
   suppliers:{table:"suppliers",rows:data.suppliers,title:"Fornecedores",fields:[["name","Nome do fornecedor","text",true],["document","CPF/CNPJ","text",false],["phone","Telefone","tel",false],["email","E-mail","email",false]],defaults:{}}
  };
  const cfg=configs[tab];
- function openNew(){setEditing(null);setForm({...emptyForm,...cfg.defaults});setMessage("")}
- function openEdit(row){setEditing(row);setForm({...emptyForm,...cfg.defaults,...row});setMessage("")}
- function closeForm(){setEditing(null);setForm(emptyForm);setMessage("")}
+ function openNew(){setEditing(null);setForm({...emptyForm,...cfg.defaults});setFormOpen(true);setMessage("")}
+ function openEdit(row){setEditing(row);setForm({...emptyForm,...cfg.defaults,...row});setFormOpen(true);setMessage("")}
+ function closeForm(){setEditing(null);setForm(emptyForm);setFormOpen(false);setMessage("")}
  async function save(e){
   e.preventDefault();if(!form.name.trim())return setMessage("Informe o nome do cadastro.");
   const payload={name:form.name.trim()};
@@ -384,13 +384,12 @@ function Cadastros({data}){
  return <main className="content"><div className="page-head"><div><h2>Configurações</h2><p>Cadastros básicos do sistema. Você pode adicionar, alterar e desativar cadastros sem apagar o histórico financeiro.</p></div><button className="primary small" onClick={openNew}><Plus size={16}/>Novo cadastro</button></div>
  <div className="tabs"><button className={tab==="banks"?"active":""} onClick={()=>{setTab("banks");closeForm()}}>Bancos</button><button className={tab==="cards"?"active":""} onClick={()=>{setTab("cards");closeForm()}}>Cartões</button><button className={tab==="cats"?"active":""} onClick={()=>{setTab("cats");closeForm()}}>Categorias</button><button className={tab==="channels"?"active":""} onClick={()=>{setTab("channels");closeForm()}}>Canais</button><button className={tab==="suppliers"?"active":""} onClick={()=>{setTab("suppliers");closeForm()}}>Fornecedores</button></div>
  {message&&!editing&&<section className="panel"><div role="alert" className="error">{message}</div></section>}
- {editing!==null||!editing&&false?null:null}
- {editing===null&&form!==emptyForm&&false?null:null}
+
  <section className="panel"><div className="section-title"><h3>{cfg.title} cadastrados</h3><span>{cfg.rows.length} registro(s)</span></div>
- {editing===null&&form.name!==""&&false?null:null}
+
  <div className="table-wrap"><table><thead><tr><th>Nome</th>{tab==="banks"&&<><th>Instituição</th><th>Tipo</th><th>Saldo inicial</th></>}{tab==="cards"&&<><th>Fechamento</th><th>Vencimento</th></>}{tab==="cats"&&<th>Classificação</th>}{tab==="suppliers"&&<><th>Documento</th><th>Telefone</th><th>E-mail</th></> }<th>Ações</th></tr></thead><tbody>{cfg.rows.map(row=><tr key={row.id}><td>{row.name}</td>{tab==="banks"&&<><td>{row.institution||"—"}</td><td>{row.account_type||"—"}</td><td>{money(row.opening_balance)}</td></>}{tab==="cards"&&<><td>{row.closing_day||"—"}</td><td>{row.due_day||"—"}</td></>}{tab==="cats"&&<td>{row.classification||"—"}</td>}{tab==="suppliers"&&<><td>{row.document||"—"}</td><td>{row.phone||"—"}</td><td>{row.email||"—"}</td></>}<td><div className="actions"><button type="button" className="ghost small" onClick={()=>openEdit(row)}>Alterar</button><button type="button" className="danger small" onClick={()=>remove(row)}>Excluir</button></div></td></tr>)}{!cfg.rows.length&&<EmptyRow text={"Nenhum cadastro em "+cfg.title.toLowerCase()+"."}/>}</tbody></table></div>
  </section>
- {(editing!==null||form.name!==""||message)&&<Modal title={editing?"Alterar "+cfg.title.slice(0,-1).toLowerCase():"Novo cadastro — "+cfg.title} onClose={closeForm}><form className="form-grid" onSubmit={save}>{cfg.fields.map(renderField)}{message&&<div role="alert" className="error" style={{gridColumn:"1 / -1"}}>{message}</div>}<div className="form-actions"><button type="button" className="ghost" onClick={closeForm}>Cancelar</button><button className="primary" disabled={saving}>{saving?"Salvando...":"Salvar cadastro"}</button></div></form></Modal>}
+ {formOpen&&<Modal title={editing?"Alterar cadastro — "+cfg.title:"Novo cadastro — "+cfg.title} onClose={closeForm}><form className="form-grid" onSubmit={save}>{cfg.fields.map(renderField)}{message&&<div role="alert" className="error" style={{gridColumn:"1 / -1"}}>{message}</div>}<div className="form-actions"><button type="button" className="ghost" onClick={closeForm}>Cancelar</button><button className="primary" disabled={saving}>{saving?"Salvando...":"Salvar cadastro"}</button></div></form></Modal>}
  </main>
 }
 function Recebimentos({data}){
