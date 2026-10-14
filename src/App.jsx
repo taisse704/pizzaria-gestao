@@ -420,7 +420,10 @@ function Caixa({data}){
 
 function ControleIFood({data}){
  const currentMonth=()=>{const d=new Date();return String(d.getFullYear())+"-"+String(d.getMonth()+1).padStart(2,"0")};
- const [month,setMonth]=useState(currentMonth),[gross,setGross]=useState(""),[net,setNet]=useState(""),[entries,setEntries]=useState([]),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[message,setMessage]=useState(""),[editing,setEditing]=useState(null);\n const orderedEntries=[...entries].sort((a,b)=>String(a.month).slice(0,10).localeCompare(String(b.month).slice(0,10)));\n const totalGross=orderedEntries.reduce((sum,row)=>sum+Number(row.gross_amount||0),0);\n const totalNet=orderedEntries.reduce((sum,row)=>sum+Number(row.net_amount||0),0);
+ const [month,setMonth]=useState(currentMonth),[gross,setGross]=useState(""),[net,setNet]=useState(""),[entries,setEntries]=useState([]),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[message,setMessage]=useState(""),[editing,setEditing]=useState(null);
+ const orderedEntries=[...entries].sort((a,b)=>String(a.month).slice(0,10).localeCompare(String(b.month).slice(0,10)));
+ const totalGross=orderedEntries.reduce((sum,row)=>sum+Number(row.gross_amount||0),0);
+ const totalNet=orderedEntries.reduce((sum,row)=>sum+Number(row.net_amount||0),0);
  async function load(){
   if(!data.user?.id)return;
   setLoading(true);
@@ -464,7 +467,7 @@ function ControleIFood({data}){
   </section>
   <section className="panel">
    <div className="section-title"><h3>Histórico mensal</h3><span className="muted">{entries.length} mês(es)</span></div>
-   {loading?<p className="muted">Carregando registros...</p>:entries.length===0?<div className="empty">Nenhum controle registrado ainda.</div>:<div className="table-wrap"><table><thead><tr><th>Mês</th><th>Valor bruto</th><th>Valor líquido</th><th>Ações</th></tr></thead><tbody>{orderedEntries.map(row=><tr key={row.id}><td>{new Date(String(row.month).slice(0,10)+"T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"})}</td><td>{money(row.gross_amount)}</td><td>{money(row.net_amount)}</td><td><div className="row-actions"><button className="ghost small" onClick={()=>edit(row)}>Editar</button><button className="danger small" onClick={()=>remove(row)}>Excluir</button></div></td></tr>)}<tr className="total-row"><th>Total</th><th>{money(totalGross)}</th><th>{money(totalNet)}</th><th>—</th></tr></tbody></table></div>}
+   {loading?<p className="muted">Carregando registros...</p>:entries.length===0?<div className="empty">Nenhum controle registrado ainda.</div>:<div className="table-wrap"><table><thead><tr><th>Mês</th><th>Valor bruto</th><th>Valor líquido</th><th>Ações</th></tr></thead><tbody>{orderedEntries.map(row=><tr key={row.id}><td>{new Date(String(row.month).slice(0,10)+"T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"})}</td><td>{money(row.gross_amount)}</td><td>{money(row.net_amount)}</td><td><div className="row-actions"><button className="ghost small" onClick={()=>edit(row)}>Editar</button><button className="danger small" onClick={()=>remove(row)}>Excluir</button></div></td></tr>)}<tr className="total-row"><th>Total geral</th><th>{money(totalGross)}</th><th>{money(totalNet)}</th><th>—</th></tr></tbody></table></div>}
   </section>
  </main>
 }
