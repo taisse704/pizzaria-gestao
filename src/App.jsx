@@ -22,7 +22,7 @@ class ModuleErrorBoundary extends Component {
 
 const modules=[
   ["dashboard","Dashboard",LayoutDashboard],["vendas","Vendas",ShoppingBag],["recebimentos","Recebimentos",Receipt],["bancos","Bancos / Extratos",Landmark],
-  ["cartoes","Cartões",CreditCard],["caixa","Caixa / Fluxo de caixa",Landmark],["contas","Contas a pagar",Receipt],["compras","Compras / Matéria-prima",ShoppingBag],["despesas","Despesas",Receipt],["cardapio","Cardápio",Utensils],["conciliacao","Conciliação",ClipboardCheck],["dados","Dados / Importações / Backup",Database],["relatorios","Relatórios",BarChart3],["configuracoes","Configurações",Settings]
+  ["cartoes","Cartões",CreditCard],["caixa","Caixa / Fluxo de caixa",Landmark],["contas","Contas a pagar",Receipt],["compras","Compras / Matéria-prima",ShoppingBag],["despesas","Despesas",Receipt],["cardapio","Cardápio",Utensils],["conciliacao","Conciliação",ClipboardCheck],["dados","Dados / Importações / Backup",Database],["relatorios","Relatórios",BarChart3],["controle-ifood","Controle iFood",ClipboardCheck],["configuracoes","Configurações",Settings]
 ];
 const money=v=>new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(Number(v||0));
 const dateBR=v=>v?new Date(v+"T00:00:00").toLocaleDateString("pt-BR"):"—";
@@ -415,6 +415,58 @@ function Caixa({data}){
  const tx=(data.cashMovements||[]).filter(x=>(!from||x.fact_date>=from)&&(!to||x.fact_date<=to)),entradas=tx.filter(x=>x.direction==="in").reduce((a,x)=>a+Number(x.amount||0),0),saidas=tx.filter(x=>x.direction==="out").reduce((a,x)=>a+Number(x.amount||0),0);
  async function save(e){e.preventDefault();if(!(Number(form.amount)>0))return alert("Informe um valor maior que zero.");setSaving(true);try{const {error}=await supabase.from("cash_movements").insert({user_id:data.user.id,fact_date:form.fact_date,description:form.description.trim(),direction:form.direction,amount:Number(form.amount),category:form.category||null});if(error)throw error;setOpen(false);setForm({fact_date:today(),description:"",direction:"in",amount:"",category:""});await data.reload()}catch(error){alert(error?.message||"Não foi possível salvar o movimento de caixa.")}finally{setSaving(false)}}
  return <main className="content"><div className="page-head"><div><h2>Caixa / Fluxo de caixa</h2><p>Somente dinheiro físico. O extrato bancário não aparece no caixa.</p></div><div className="actions"><button className="ghost" onClick={()=>downloadCSV(tx,"fluxo-de-caixa.csv")}><Download size={16}/>CSV</button><button className="primary small" onClick={()=>setOpen(true)}><Plus size={16}/>Novo movimento de caixa</button></div></div><div className="filters"><Field label="De"><input type="date" value={from} onChange={e=>setFrom(e.target.value)}/></Field><Field label="Até"><input type="date" value={to} onChange={e=>setTo(e.target.value)}/></Field></div><div className="cards"><div className="card"><span>Entradas em dinheiro</span><strong>{money(entradas)}</strong></div><div className="card"><span>Saídas em dinheiro</span><strong>{money(saidas)}</strong></div><div className="card"><span>Saldo de caixa</span><strong>{money(entradas-saidas)}</strong></div></div><section className="panel"><div className="section-title"><h3>Movimentações de dinheiro físico</h3><span>{tx.length} registro(s)</span></div><div className="table-wrap"><table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Entrada</th><th>Saída</th></tr></thead><tbody>{tx.map(x=><tr key={x.id}><td>{dateBR(x.fact_date)}</td><td>{x.description}</td><td>{x.category||"—"}</td><td>{x.direction==="in"?money(x.amount):"—"}</td><td>{x.direction==="out"?money(x.amount):"—"}</td></tr>)}{!tx.length&&<EmptyRow text="Nenhum movimento de dinheiro físico cadastrado."/>}</tbody></table></div></section>{open&&<Modal title="Novo movimento de caixa" onClose={()=>setOpen(false)}><form className="form-grid" onSubmit={save}><Field label="Data"><input type="date" value={form.fact_date} onChange={e=>setForm({...form,fact_date:e.target.value})} required/></Field><Field label="Tipo"><select value={form.direction} onChange={e=>setForm({...form,direction:e.target.value})}><option value="in">Entrada em dinheiro</option><option value="out">Saída em dinheiro</option></select></Field><Field label="Descrição"><input value={form.description} onChange={e=>setForm({...form,description:e.target.value})} required/></Field><Field label="Categoria"><input value={form.category} onChange={e=>setForm({...form,category:e.target.value})}/></Field><Field label="Valor"><input type="number" min="0.01" step="0.01" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} required/></Field><div className="form-actions"><button className="primary" disabled={saving}>{saving?"Salvando...":"Salvar movimento"}</button></div></form></Modal>}</main>
+}
+
+
+function ControleIFood({data}){
+ const currentMonth=()=>{const d=new Date();return String(d.getFullYear())+"-"+String(d.getMonth()+1).padStart(2,"0")};
+ const [month,setMonth]=useState(currentMonth),[gross,setGross]=useState(""),[net,setNet]=useState(""),[entries,setEntries]=useState([]),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[message,setMessage]=useState(""),[editing,setEditing]=useState(null);
+ async function load(){
+  if(!data.user?.id)return;
+  setLoading(true);
+  const {data:rows,error}=await supabase.from("ifood_monthly_control").select("*").eq("user_id",data.user.id).order("month",{ascending:false});
+  if(error){setMessage("Não foi possível carregar os controles: "+error.message);setEntries([])}
+  else{setEntries(rows||[]);setMessage("")}
+  setLoading(false);
+ }
+ useEffect(()=>{load()},[data.user?.id]);
+ function resetForm(){setMonth(currentMonth());setGross("");setNet("");setEditing(null)}
+ async function save(e){
+  e.preventDefault();setMessage("");
+  if(!month||gross===""||net===""){setMessage("Preencha o mês, o valor bruto e o valor líquido.");return}
+  const bruto=Number(gross),liquido=Number(net);
+  if(!Number.isFinite(bruto)||!Number.isFinite(liquido)||bruto<0||liquido<0){setMessage("Informe valores válidos, iguais ou maiores que zero.");return}
+  setSaving(true);
+  const {error}=await supabase.from("ifood_monthly_control").upsert({user_id:data.user.id,month:month+"-01",gross_amount:bruto,net_amount:liquido},{onConflict:"user_id,month"});
+  if(error)setMessage("Não foi possível salvar: "+error.message);
+  else{setMessage("Controle iFood salvo com sucesso.");await load();resetForm()}
+  setSaving(false);
+ }
+ function edit(row){setEditing(row.id);setMonth(String(row.month).slice(0,7));setGross(String(row.gross_amount??0));setNet(String(row.net_amount??0));setMessage("")}
+ async function remove(row){
+  if(!window.confirm("Excluir o controle do iFood de "+new Date(String(row.month).slice(0,10)+"T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"})+"?"))return;
+  const {error}=await supabase.from("ifood_monthly_control").delete().eq("id",row.id).eq("user_id",data.user.id);
+  if(error)setMessage("Não foi possível excluir: "+error.message);else{setMessage("Registro excluído.");if(editing===row.id)resetForm();await load()}
+ }
+ return <main className="content">
+  <div className="page-head"><div><h2>Controle iFood</h2><p>Registre o fechamento mensal do iFood com os valores bruto e líquido.</p></div></div>
+  <section className="panel">
+   <div className="section-title"><h3>{editing?"Editar controle mensal":"Adicionar mês"}</h3></div>
+   <form onSubmit={save}>
+    <div className="form-grid">
+     <Field label="Mês"><input type="month" value={month} onChange={e=>setMonth(e.target.value)} required/></Field>
+     <Field label="Valor bruto (R$)"><input type="number" min="0" step="0.01" inputMode="decimal" placeholder="0,00" value={gross} onChange={e=>setGross(e.target.value)} required/></Field>
+     <Field label="Valor líquido (R$)"><input type="number" min="0" step="0.01" inputMode="decimal" placeholder="0,00" value={net} onChange={e=>setNet(e.target.value)} required/></Field>
+    </div>
+    {message&&<p className={message.startsWith("Não foi")?"error":"success"}>{message}</p>}
+    <div className="form-actions"><button className="primary" type="submit" disabled={saving}>{saving?"Salvando...":editing?"Salvar alterações":"Salvar controle"}</button>{editing&&<button className="ghost" type="button" onClick={resetForm}>Cancelar edição</button>}</div>
+   </form>
+  </section>
+  <section className="panel">
+   <div className="section-title"><h3>Histórico mensal</h3><span className="muted">{entries.length} mês(es)</span></div>
+   {loading?<p className="muted">Carregando registros...</p>:entries.length===0?<div className="empty">Nenhum controle registrado ainda.</div>:<div className="table-wrap"><table><thead><tr><th>Mês</th><th>Valor bruto</th><th>Valor líquido</th><th>Ações</th></tr></thead><tbody>{entries.map(row=><tr key={row.id}><td>{new Date(String(row.month).slice(0,10)+"T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"})}</td><td>{money(row.gross_amount)}</td><td>{money(row.net_amount)}</td><td><div className="row-actions"><button className="ghost small" onClick={()=>edit(row)}>Editar</button><button className="danger small" onClick={()=>remove(row)}>Excluir</button></div></td></tr>)}</tbody></table></div>}
+  </section>
+ </main>
 }
 
 function Relatorios({data}){
@@ -937,6 +989,6 @@ export default function App(){ const [user,setUser]=useState(null),[active,setAc
  return <div className="app"><aside className={mobile?"sidebar open":"sidebar"}><div className="logo"><span>🍕</span><div><b>Pizzaria</b><small>GESTÃO</small></div><button className="close" onClick={()=>setMobile(false)}><X size={20}/></button></div><nav>{modules.map(([id,label,I])=><button key={id} className={active===id?"active":""} onClick={()=>{setActive(id);setMobile(false)}}><I size={19}/>{label}</button>)}</nav><button className="logout" onClick={logout}><LogOut size={18}/>Sair</button></aside>
  <div className="main"><header><button className="menu" onClick={()=>setMobile(true)}><Menu/></button><div className="header-title">{Icon&&<Icon size={18}/>} {current?.[1]}</div><div className="header-user">{user.email}</div></header>
  {data.loading?<main className="content"><section className="panel empty"><RefreshCw className="spin"/><h3>Carregando seus dados...</h3></section></main>:
- <ModuleErrorBoundary key={active}>{active==="dashboard"?<Dashboard data={data}/>:active==="vendas"?<Vendas data={{...data,user}}/>:active==="recebimentos"?<Recebimentos data={data}/>:active==="bancos"?<Bancos data={{...data,user}}/>:active==="cartoes"?<Cartoes data={{...data,user}}/>:active==="caixa"?<Caixa data={{...data,user}}/>:active==="contas"?<Contas data={{...data,user}}/>:active==="compras"?<Compras data={{...data,user}}/>:active==="despesas"?<Despesas data={{...data,user}}/>:active==="cardapio"?<Cardapio data={{...data,user}}/>:active==="conciliacao"?<Conciliacao data={{...data,user}}/>:active==="dados"?<Dados data={{...data,user}}/>:active==="relatorios"?<Relatorios data={data}/>:<Cadastros data={{...data,user}}/>}</ModuleErrorBoundary>}
+ <ModuleErrorBoundary key={active}>{active==="dashboard"?<Dashboard data={data}/>:active==="vendas"?<Vendas data={{...data,user}}/>:active==="recebimentos"?<Recebimentos data={data}/>:active==="bancos"?<Bancos data={{...data,user}}/>:active==="cartoes"?<Cartoes data={{...data,user}}/>:active==="caixa"?<Caixa data={{...data,user}}/>:active==="contas"?<Contas data={{...data,user}}/>:active==="compras"?<Compras data={{...data,user}}/>:active==="despesas"?<Despesas data={{...data,user}}/>:active==="cardapio"?<Cardapio data={{...data,user}}/>:active==="conciliacao"?<Conciliacao data={{...data,user}}/>:active==="dados"?<Dados data={{...data,user}}/>:active==="relatorios"?<Relatorios data={data}/>:active==="controle-ifood"?<ControleIFood data={{...data,user}}/>:<Cadastros data={{...data,user}}/>}</ModuleErrorBoundary>}
  </div></div>
 }
