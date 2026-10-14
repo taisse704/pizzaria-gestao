@@ -22,7 +22,7 @@ class ModuleErrorBoundary extends Component {
 
 const modules=[
   ["dashboard","Dashboard",LayoutDashboard],["vendas","Vendas",ShoppingBag],["recebimentos","Recebimentos",Receipt],["bancos","Bancos / Extratos",Landmark],
-  ["cartoes","Cartões",CreditCard],["caixa","Caixa / Fluxo de caixa",Landmark],["contas","Contas a pagar",Receipt],["compras","Compras / Matéria-prima",ShoppingBag],["despesas","Despesas",Receipt],["cardapio","Cardápio",Utensils],["conciliacao","Conciliação",ClipboardCheck],["dados","Dados / Importações / Backup",Database],["relatorios","Relatórios",BarChart3],["controle-ifood","Controle iFood",ClipboardCheck],["configuracoes","Configurações",Settings]
+  ["cartoes","Cartões",CreditCard],["gastos-cartao","Gastos no cartão",CreditCard],["caixa","Caixa / Fluxo de caixa",Landmark],["contas","Contas a pagar",Receipt],["compras","Compras / Matéria-prima",ShoppingBag],["despesas","Despesas",Receipt],["cardapio","Cardápio",Utensils],["conciliacao","Conciliação",ClipboardCheck],["dados","Dados / Importações / Backup",Database],["relatorios","Relatórios",BarChart3],["controle-ifood","Controle iFood",ClipboardCheck],["configuracoes","Configurações",Settings]
 ];
 const money=v=>new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(Number(v||0));
 const dateBR=v=>v?new Date(v+"T00:00:00").toLocaleDateString("pt-BR"):"—";
@@ -472,6 +472,51 @@ function Cartoes({data}){
   {open&&<Modal title="Nova compra no cartão" onClose={()=>setOpen(false)}><form className="form-grid" onSubmit={save}><Field label="Cartão"><select value={form.card_account_id} onChange={e=>setForm({...form,card_account_id:e.target.value})} required><option value="">Selecione</option>{cards.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></Field><Field label="Data da compra"><input type="date" value={form.fact_date} onChange={e=>setForm({...form,fact_date:e.target.value})} required/></Field><Field label="Competência"><input type="date" value={form.competence_date} onChange={e=>setForm({...form,competence_date:e.target.value})} required/></Field><Field label="Descrição"><input value={form.description} onChange={e=>setForm({...form,description:e.target.value})} required/></Field><Field label="Categoria"><select value={form.category_id} onChange={e=>setForm({...form,category_id:e.target.value})}><option value="">Selecione</option>{categories.filter(c=>c.classification==="Despesas").map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></Field><Field label="Valor total"><input type="number" min="0.01" step="0.01" value={form.total_amount} onChange={e=>setForm({...form,total_amount:e.target.value})} required/></Field><Field label="Parcelas"><input type="number" min="1" max="120" step="1" value={form.installments} onChange={e=>setForm({...form,installments:e.target.value})} required/></Field><div className="form-actions"><button className="primary" disabled={saving}>{saving?"Salvando...":"Salvar compra"}</button></div></form></Modal>}
  </main>
 }
+
+function GastosCartao({data}){
+ const [rows,setRows]=useState([]),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[open,setOpen]=useState(false),[editing,setEditing]=useState(null);
+ const [month,setMonth]=useState(""),[cardFilter,setCardFilter]=useState("");
+ const blank={card_account_id:"",fact_date:today(),description:"",amount:""};
+ const [form,setForm]=useState(blank);
+ const cards=Array.isArray(data.cards)?data.cards:[];
+ async function load(){
+  setLoading(true);
+  try{const {data:found,error}=await supabase.from("card_expenses").select("*,card_accounts(name)").eq("user_id",data.user.id).order("fact_date",{ascending:false}).limit(5000);if(error)throw error;setRows(Array.isArray(found)?found:[])}
+  catch(error){console.error("Erro ao carregar gastos no cartão:",error);alert(error?.message||"Não foi possível carregar os gastos no cartão.");setRows([])}
+  finally{setLoading(false)}
+ }
+ useEffect(()=>{load()},[data.user.id]);
+ const visible=rows.filter(x=>(!month||String(x.fact_date||"").slice(0,7)===month)&&(!cardFilter||x.card_account_id===cardFilter));
+ const total=visible.reduce((sum,x)=>sum+Number(x.amount||0),0);
+ function newExpense(){setEditing(null);setForm({...blank,card_account_id:cards[0]?.id||""});setOpen(true)}
+ function editExpense(x){setEditing(x);setForm({card_account_id:x.card_account_id,fact_date:String(x.fact_date||"").slice(0,10),description:x.description||"",amount:String(x.amount??"")});setOpen(true)}
+ async function save(e){
+  e.preventDefault();if(!form.card_account_id)return alert("Selecione o cartão usado.");if(!form.description.trim())return alert("Informe a descrição do gasto.");if(!(Number(form.amount)>0))return alert("Informe um valor maior que zero.");setSaving(true);
+  try{const payload={user_id:data.user.id,card_account_id:form.card_account_id,fact_date:form.fact_date,description:form.description.trim(),amount:Number(form.amount)};
+   const q=editing?supabase.from("card_expenses").update(payload).eq("id",editing.id).eq("user_id",data.user.id):supabase.from("card_expenses").insert(payload);
+   const {error}=await q;if(error)throw error;setOpen(false);setEditing(null);setForm(blank);await load();
+  }catch(error){alert(error?.message||"Não foi possível salvar o gasto.")}finally{setSaving(false)}
+ }
+ async function removeExpense(x){if(!confirm("Excluir este gasto do cartão? Esta ação não poderá ser desfeita."))return;const {error}=await supabase.from("card_expenses").delete().eq("id",x.id).eq("user_id",data.user.id);if(error)alert(error.message);else await load()}
+ return <main className="content">
+  <div className="page-head"><div><h2>Gastos no cartão de crédito</h2><p>Controle separado dos gastos, sem alterar compras, parcelas ou faturas já cadastradas.</p></div><button className="primary small" onClick={newExpense}><Plus size={16}/>Novo gasto</button></div>
+  <div className="cards"><div className="card"><span>Total dos gastos filtrados</span><strong>{money(total)}</strong><small>{visible.length} lançamento(s)</small></div></div>
+  <div className="filters" style={{marginTop:12}}><label>Mês <input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></label><select aria-label="Filtrar por cartão" value={cardFilter} onChange={e=>setCardFilter(e.target.value)}><option value="">Todos os cartões</option>{cards.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select><button className="ghost" onClick={()=>{setMonth("");setCardFilter("")}}>Limpar filtros</button></div>
+  {!cards.length&&<section className="panel"><p>Nenhum cartão ativo cadastrado. Cadastre o cartão em Configurações antes de lançar gastos.</p></section>}
+  <div className="table-wrap" style={{marginTop:12}}><table><thead><tr><th>Data</th><th>Descrição</th><th>Cartão usado</th><th>Valor</th><th>Ações</th></tr></thead><tbody>
+   {loading?<EmptyRow text="Carregando gastos..."/>:visible.map(x=><tr key={x.id}><td>{dateBR(x.fact_date)}</td><td>{x.description}</td><td>{x.card_accounts?.name||cards.find(c=>c.id===x.card_account_id)?.name||"—"}</td><td>{money(x.amount)}</td><td><button className="icon-btn" title="Editar gasto" onClick={()=>editExpense(x)}>✏️</button><button className="icon-btn" title="Excluir gasto" onClick={()=>removeExpense(x)}>🗑️</button></td></tr>)}
+   {!loading&&!visible.length&&<EmptyRow text="Nenhum gasto encontrado."/>}
+  </tbody></table></div>
+  {open&&<Modal title={editing?"Editar gasto no cartão":"Novo gasto no cartão"} onClose={()=>setOpen(false)}><form className="form-grid" onSubmit={save}>
+   <Field label="Cartão usado"><select value={form.card_account_id} onChange={e=>setForm({...form,card_account_id:e.target.value})} required><option value="">Selecione o cartão</option>{cards.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+   <Field label="Data"><input type="date" value={form.fact_date} onChange={e=>setForm({...form,fact_date:e.target.value})} required/></Field>
+   <Field label="Descrição"><input value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Ex.: compra de ingredientes" required/></Field>
+   <Field label="Valor (R$)"><input type="number" min="0.01" step="0.01" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} required/></Field>
+   <div className="form-actions"><button className="primary" disabled={saving||!cards.length}>{saving?"Salvando...":"Salvar gasto"}</button></div>
+  </form></Modal>}
+ </main>
+}
+
 function Caixa({data}){
  const [open,setOpen]=useState(false),[from,setFrom]=useState(monthStart()),[to,setTo]=useState(today()),[saving,setSaving]=useState(false),[form,setForm]=useState({fact_date:today(),description:"",direction:"in",amount:"",category:""});
  const tx=(data.cashMovements||[]).filter(x=>(!from||x.fact_date>=from)&&(!to||x.fact_date<=to)),entradas=tx.filter(x=>x.direction==="in").reduce((a,x)=>a+Number(x.amount||0),0),saidas=tx.filter(x=>x.direction==="out").reduce((a,x)=>a+Number(x.amount||0),0);
@@ -1074,6 +1119,6 @@ export default function App(){ const [user,setUser]=useState(null),[active,setAc
  return <div className="app"><aside className={mobile?"sidebar open":"sidebar"}><div className="logo"><span>🍕</span><div><b>Pizzaria</b><small>GESTÃO</small></div><button className="close" onClick={()=>setMobile(false)}><X size={20}/></button></div><nav>{modules.map(([id,label,I])=><button key={id} className={active===id?"active":""} onClick={()=>{setActive(id);setMobile(false)}}><I size={19}/>{label}</button>)}</nav><button className="logout" onClick={logout}><LogOut size={18}/>Sair</button></aside>
  <div className="main"><header><button className="menu" onClick={()=>setMobile(true)}><Menu/></button><div className="header-title">{Icon&&<Icon size={18}/>} {current?.[1]}</div><div className="header-user">{user.email}</div></header>
  {data.loading?<main className="content"><section className="panel empty"><RefreshCw className="spin"/><h3>Carregando seus dados...</h3></section></main>:
- <ModuleErrorBoundary key={active}>{active==="dashboard"?<Dashboard data={data}/>:active==="vendas"?<Vendas data={{...data,user}}/>:active==="recebimentos"?<Recebimentos data={data}/>:active==="bancos"?<Bancos data={{...data,user}}/>:active==="cartoes"?<Cartoes data={{...data,user}}/>:active==="caixa"?<Caixa data={{...data,user}}/>:active==="contas"?<Contas data={{...data,user}}/>:active==="compras"?<Compras data={{...data,user}}/>:active==="despesas"?<Despesas data={{...data,user}}/>:active==="cardapio"?<Cardapio data={{...data,user}}/>:active==="conciliacao"?<Conciliacao data={{...data,user}}/>:active==="dados"?<Dados data={{...data,user}}/>:active==="relatorios"?<Relatorios data={data}/>:active==="controle-ifood"?<ControleIFood data={{...data,user}}/>:<Cadastros data={{...data,user}}/>}</ModuleErrorBoundary>}
+ <ModuleErrorBoundary key={active}>{active==="dashboard"?<Dashboard data={data}/>:active==="vendas"?<Vendas data={{...data,user}}/>:active==="recebimentos"?<Recebimentos data={data}/>:active==="bancos"?<Bancos data={{...data,user}}/>:active==="cartoes"?<Cartoes data={{...data,user}}/>:active==="gastos-cartao"?<GastosCartao data={{...data,user}}/>:active==="caixa"?<Caixa data={{...data,user}}/>:active==="contas"?<Contas data={{...data,user}}/>:active==="compras"?<Compras data={{...data,user}}/>:active==="despesas"?<Despesas data={{...data,user}}/>:active==="cardapio"?<Cardapio data={{...data,user}}/>:active==="conciliacao"?<Conciliacao data={{...data,user}}/>:active==="dados"?<Dados data={{...data,user}}/>:active==="relatorios"?<Relatorios data={data}/>:active==="controle-ifood"?<ControleIFood data={{...data,user}}/>:<Cadastros data={{...data,user}}/>}</ModuleErrorBoundary>}
  </div></div>
 }
