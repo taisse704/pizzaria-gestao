@@ -439,14 +439,14 @@ function ControleIFood({data}){
   setSaving(true);
   const {error}=await supabase.from("ifood_monthly_control").upsert({user_id:data.user.id,month:month+"-01",gross_amount:bruto,net_amount:liquido},{onConflict:"user_id,month"});
   if(error)setMessage("Não foi possível salvar: "+error.message);
-  else{setMessage("Controle iFood salvo com sucesso.");await load();resetForm()}
+  else{await load();resetForm();setMessage("Controle iFood salvo com sucesso.")}
   setSaving(false);
  }
  function edit(row){setEditing(row.id);setMonth(String(row.month).slice(0,7));setGross(String(row.gross_amount??0));setNet(String(row.net_amount??0));setMessage("")}
  async function remove(row){
   if(!window.confirm("Excluir o controle do iFood de "+new Date(String(row.month).slice(0,10)+"T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"})+"?"))return;
   const {error}=await supabase.from("ifood_monthly_control").delete().eq("id",row.id).eq("user_id",data.user.id);
-  if(error)setMessage("Não foi possível excluir: "+error.message);else{setMessage("Registro excluído.");if(editing===row.id)resetForm();await load()}
+  if(error)setMessage("Não foi possível excluir: "+error.message);else{if(editing===row.id)resetForm();await load();setMessage("Registro excluído.")}
  }
  return <main className="content">
   <div className="page-head"><div><h2>Controle iFood</h2><p>Registre o fechamento mensal do iFood com os valores bruto e líquido.</p></div></div>
