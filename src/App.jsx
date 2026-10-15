@@ -186,7 +186,10 @@ function ImportarConferencia({data,kind,onClose}){
 
 function Vendas({data}){
  const [open,setOpen]=useState(false),[editing,setEditing]=useState(null),[saving,setSaving]=useState(false),[selected,setSelected]=useState(new Set()),[importOpen,setImportOpen]=useState(false);
- const [month,setMonth]=useState(""),[dateFrom,setDateFrom]=useState(""),[dateTo,setDateTo]=useState(""),[channel,setChannel]=useState(""),[payment,setPayment]=useState("");
+ const savedSalesFilters=(()=>{try{return JSON.parse(localStorage.getItem("pizzaria-vendas-filtros")||"{}")}catch{return {}}})();
+ const [month,setMonth]=useState(savedSalesFilters.month||""),[dateFrom,setDateFrom]=useState(savedSalesFilters.dateFrom||""),[dateTo,setDateTo]=useState(savedSalesFilters.dateTo||""),[channel,setChannel]=useState(savedSalesFilters.channel||""),[payment,setPayment]=useState(savedSalesFilters.payment||"");
+ useEffect(()=>{try{localStorage.setItem("pizzaria-vendas-filtros",JSON.stringify({month,dateFrom,dateTo,channel,payment}))}catch{}},[month,dateFrom,dateTo,channel,payment]);
+ const clearSalesFilters=()=>{setMonth("");setDateFrom("");setDateTo("");setChannel("");setPayment("");try{localStorage.removeItem("pizzaria-vendas-filtros")}catch{}};
  const products=data.products||[];
  const categoryName=p=>p?.categories?.name||"";
  const pizzas=products.filter(p=>["Pizzas Tradicionais","Pizzas Especiais"].includes(categoryName(p)));
@@ -398,7 +401,9 @@ function Cadastros({data}){
  </main>
 }
 function Recebimentos({data}){
- const [status,setStatus]=useState("all");
+ const [status,setStatus]=useState(()=>{try{return localStorage.getItem("pizzaria-recebimentos-filtro-status")||"all"}catch{return "all"}});
+ useEffect(()=>{try{localStorage.setItem("pizzaria-recebimentos-filtro-status",status)}catch{}},[status]);
+ const clearReceiptsFilter=()=>{setStatus("all");try{localStorage.removeItem("pizzaria-recebimentos-filtro-status")}catch{}};
  const bankRows=(data.bankTx||[]).filter(x=>x.direction==="in"&&String(x.classification||"").toLocaleLowerCase("pt-BR").includes("receita"));
  const forecast=(data.receivables||[]).filter(x=>x.status!=="cancelled"&&(status==="all"||status==="pending"&&x.status!=="received"||status==="received"&&x.status==="received"));
  const bankTotal=bankRows.reduce((a,x)=>a+Number(x.amount||0),0),pendingTotal=forecast.filter(x=>x.status!=="received").reduce((a,x)=>a+Math.max(0,Number(x.amount||0)-Number(x.received_amount||0)),0);
@@ -475,7 +480,10 @@ function Cartoes({data}){
 
 function GastosCartao({data}){
  const [rows,setRows]=useState([]),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[open,setOpen]=useState(false),[editing,setEditing]=useState(null);
- const [month,setMonth]=useState(""),[cardFilter,setCardFilter]=useState("");
+ const savedCardExpenseFilters=(()=>{try{return JSON.parse(localStorage.getItem("pizzaria-gastos-cartao-filtros")||"{}")}catch{return {}}})();
+ const [month,setMonth]=useState(savedCardExpenseFilters.month||""),[cardFilter,setCardFilter]=useState(savedCardExpenseFilters.cardFilter||"");
+ useEffect(()=>{try{localStorage.setItem("pizzaria-gastos-cartao-filtros",JSON.stringify({month,cardFilter}))}catch{}},[month,cardFilter]);
+ const clearCardExpenseFilters=()=>{setMonth("");setCardFilter("");try{localStorage.removeItem("pizzaria-gastos-cartao-filtros")}catch{}};
  const blank={card_account_id:"",fact_date:today(),description:"",amount:""};
  const [form,setForm]=useState(blank);
  const cards=Array.isArray(data.cards)?data.cards:[];
@@ -501,7 +509,7 @@ function GastosCartao({data}){
  return <main className="content">
   <div className="page-head"><div><h2>Gastos no cartão de crédito</h2><p>Controle separado dos gastos, sem alterar compras, parcelas ou faturas já cadastradas.</p></div><button className="primary small" onClick={newExpense}><Plus size={16}/>Novo gasto</button></div>
   <div className="cards"><div className="card"><span>Total dos gastos filtrados</span><strong>{money(total)}</strong><small>{visible.length} lançamento(s)</small></div></div>
-  <div className="filters" style={{marginTop:12}}><label>Mês <input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></label><select aria-label="Filtrar por cartão" value={cardFilter} onChange={e=>setCardFilter(e.target.value)}><option value="">Todos os cartões</option>{cards.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select><button className="ghost" onClick={()=>{setMonth("");setCardFilter("")}}>Limpar filtros</button></div>
+  <div className="filters" style={{marginTop:12}}><label>Mês <input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></label><select aria-label="Filtrar por cartão" value={cardFilter} onChange={e=>setCardFilter(e.target.value)}><option value="">Todos os cartões</option>{cards.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select><button className="ghost" onClick={clearCardExpenseFilters}>Limpar filtros</button></div>
   {!cards.length&&<section className="panel"><p>Nenhum cartão ativo cadastrado. Cadastre o cartão em Configurações antes de lançar gastos.</p></section>}
   <div className="table-wrap" style={{marginTop:12}}><table><thead><tr><th>Data</th><th>Descrição</th><th>Cartão usado</th><th>Valor</th><th>Ações</th></tr></thead><tbody>
    {loading?<tr><td colSpan="5" className="empty-row">Carregando gastos...</td></tr>:visible.map(x=><tr key={x.id}><td>{dateBR(x.fact_date)}</td><td>{x.description}</td><td>{x.card_accounts?.name||cards.find(c=>c.id===x.card_account_id)?.name||"—"}</td><td>{money(x.amount)}</td><td><button className="icon-btn" title="Editar gasto" onClick={()=>editExpense(x)}>✏️</button><button className="icon-btn" title="Excluir gasto" onClick={()=>removeExpense(x)}>🗑️</button></td></tr>)}
@@ -1085,7 +1093,8 @@ function downloadCSV(rows,name){const clean=rows.map(r=>Object.fromEntries(Objec
 
 function useData(user){
  const [state,setState]=useState({banks:[],categories:[],channels:[],suppliers:[],cards:[],sales:[],bankTx:[],payables:[],receivables:[],manualExpenses:[],cashMovements:[],products:[],purchases:[],loading:true,error:""});
- const [search,setSearch]=useState(""),[bankFilter,setBankFilter]=useState(""),[payFilter,setPayFilter]=useState("");
+ const [search,setSearch]=useState(()=>{try{return localStorage.getItem("pizzaria-filtro-pesquisa")||""}catch{return ""}}),[bankFilter,setBankFilter]=useState(()=>{try{return localStorage.getItem("pizzaria-filtro-banco-global")||""}catch{return ""}}),[payFilter,setPayFilter]=useState(()=>{try{return localStorage.getItem("pizzaria-filtro-contas-status")||""}catch{return ""}});
+ useEffect(()=>{try{localStorage.setItem("pizzaria-filtro-pesquisa",search);localStorage.setItem("pizzaria-filtro-banco-global",bankFilter);localStorage.setItem("pizzaria-filtro-contas-status",payFilter)}catch{}},[search,bankFilter,payFilter]);
  async function reload(){
   if(!user?.id||!supabase){setState(s=>({...s,loading:false,error:"Não foi possível acessar o Supabase."}));return}
   setState(s=>({...s,loading:true,error:""}));
