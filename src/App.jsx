@@ -185,7 +185,7 @@ function ImportarConferencia({data,kind,onClose}){
 }
 
 function Vendas({data}){
- const [open,setOpen]=useState(false),[editing,setEditing]=useState(null),[saving,setSaving]=useState(false),[selected,setSelected]=useState(new Set()),[importOpen,setImportOpen]=useState(false);
+ const [open,setOpen]=useState(false),[editing,setEditing]=useState(null),[saving,setSaving]=useState(false),[selected,setSelected]=useState(new Set()),[importOpen,setImportOpen]=useState(false),[importedEditing,setImportedEditing]=useState(null),[importedForm,setImportedForm]=useState(null),[savingImported,setSavingImported]=useState(false);
  const savedSalesFilters=(()=>{try{return JSON.parse(localStorage.getItem("pizzaria-vendas-filtros")||"{}")}catch{return {}}})();
  const [month,setMonth]=useState(savedSalesFilters.month||""),[dateFrom,setDateFrom]=useState(savedSalesFilters.dateFrom||""),[dateTo,setDateTo]=useState(savedSalesFilters.dateTo||""),[channel,setChannel]=useState(savedSalesFilters.channel||""),[payment,setPayment]=useState(savedSalesFilters.payment||"");
  useEffect(()=>{try{localStorage.setItem("pizzaria-vendas-filtros",JSON.stringify({month,dateFrom,dateTo,channel,payment}))}catch{}},[month,dateFrom,dateTo,channel,payment]);
@@ -228,7 +228,11 @@ function Vendas({data}){
  const totalNet=rows.reduce((sum,x)=>sum+Number(x.net_amount||0),0);
  function reset(){setEditing(null);setForm({...blank,channel_id:data.channels.find(x=>x.name==="Direto")?.id||"",lines:[newPizza()]});setOpen(true)}
  function editSale(x){
-   if(x.source!=="manual"){alert("Esta venda foi importada e não pode ser editada aqui. Para manter a importação íntegra, edições manuais ficam disponíveis somente para vendas diretas.");return}
+   if(x.source!=="manual"){
+     setImportedEditing(x);
+     setImportedForm({fact_date:String(x.fact_date||"").slice(0,10)||today(),customer_name:x.customer_name||"",customer_phone:x.customer_phone||"",customer_address:x.customer_address||"",channel_id:x.channel_id||"",payment_method:x.payment_method||"",gross_amount:String(x.gross_amount??0),delivery_fee:String(x.delivery_fee??0),discounts:String(x.discounts??0),fees:String(x.fees??0),cancellations:String(x.cancellations??0)});
+     return;
+   }
    const items=x.sale_items||[];
    const lines=items.map(i=>{
      const p=products.find(p=>p.id===i.product_id)||products.find(p=>p.name===i.product_name);
@@ -264,6 +268,31 @@ function Vendas({data}){
    setOpen(false);data.reload();
   }catch(error){alert(error?.message||"Não foi possível salvar a venda.")}finally{setSaving(false)}
  }
+ async function saveImportedSale(e){
+  e.preventDefault();
+  if(!importedEditing||!importedForm)return;
+  const gross=Number(importedForm.gross_amount||0),delivery=Number(importedForm.delivery_fee||0),discounts=Number(importedForm.discounts||0),fees=Number(importedForm.fees||0),cancellations=Number(importedForm.cancellations||0);
+  if([gross,delivery,discounts,fees,cancellations].some(v=>!Number.isFinite(v)||v<0))return alert("Confira os valores: use números iguais ou maiores que zero.");
+  const factDate=importedForm.fact_date;
+  if(!factDate)return alert("Informe a data da venda.");
+  const net=gross+delivery-discounts-fees-cancellations;
+  setSavingImported(true);
+  try{
+    const {data:links,error:linkError}=await supabase.from("reconciliation_batch_items").select("batch_id").eq("sale_id",importedEditing.id).limit(1);
+    if(linkError)throw linkError;
+    if(links?.length){alert("Esta venda está vinculada a uma conciliação. Desfaça o repasse na tela Conciliação antes de editar.");return}
+    const payload={fact_date:new Date(factDate+"T12:00:00").toISOString(),competence_date:factDate,customer_name:importedForm.customer_name.trim()||null,customer_phone:importedForm.customer_phone.trim()||null,customer_address:importedForm.customer_address.trim()||null,channel_id:importedForm.channel_id||null,payment_method:importedForm.payment_method.trim()||null,gross_amount:gross,delivery_fee:delivery,discounts,fees,cancellations,net_amount:net};
+    const {error}=await supabase.from("sales").update(payload).eq("id",importedEditing.id).eq("user_id",data.user.id);
+    if(error)throw error;
+    const {data:receivables,error:recvError}=await supabase.from("receivables").select("id").eq("sale_id",importedEditing.id).eq("user_id",data.user.id);
+    if(recvError)throw recvError;
+    if(receivables?.length){
+      const {error:updateError}=await supabase.from("receivables").update({competence_date:factDate,expected_date:factDate,amount:net,description:"Venda importada"+(importedForm.customer_name.trim()?" — "+importedForm.customer_name.trim():"")}).eq("sale_id",importedEditing.id).eq("user_id",data.user.id);
+      if(updateError)throw updateError;
+    }
+    setImportedEditing(null);setImportedForm(null);data.reload();
+  }catch(error){alert(error?.message||"Não foi possível salvar as alterações da venda importada.")}finally{setSavingImported(false)}
+ }
  async function removeSale(x){
   if(!confirm(`Excluir esta venda ${x.source==="manual"?"direta":"importada"} e seus itens/recebíveis vinculados? Esta ação não poderá ser desfeita.`))return;
   try{const {data:links,error:linkError}=await supabase.from("reconciliation_batch_items").select("batch_id").eq("sale_id",x.id).limit(1);if(linkError)throw linkError;if(links?.length){alert("Esta venda está vinculada a uma conciliação. Entre em Conciliação e desfaça o repasse antes de excluir.");return}const {error:r}=await supabase.from("receivables").delete().eq("sale_id",x.id).eq("user_id",data.user.id);if(r)throw r;const {error:i}=await supabase.from("sale_items").delete().eq("sale_id",x.id);if(i)throw i;const {error}=await supabase.from("sales").delete().eq("id",x.id).eq("user_id",data.user.id);if(error)throw error;setSelected(prev=>{const next=new Set(prev);next.delete(x.id);return next});data.reload()}catch(error){alert(error?.message||"Não foi possível excluir a venda.")}
@@ -274,8 +303,24 @@ function Vendas({data}){
  <div className="filters"><label>Mês <input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></label><label>De <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}/></label><label>Até <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}/></label><select value={channel} onChange={e=>setChannel(e.target.value)}><option value="">Todos os canais</option>{data.channels.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select><select value={payment} onChange={e=>setPayment(e.target.value)}><option value="">Todos os pagamentos</option>{["PIX","Dinheiro","Cartão de crédito","Cartão de débito"].map(x=><option key={x}>{x}</option>)}</select><div className="search"><Search size={16}/><input placeholder="Pesquisar..." value={data.search} onChange={e=>data.setSearch(e.target.value)}/></div><button className="ghost" onClick={()=>{clearSalesFilters();data.setSearch("")}}>Limpar filtros</button></div>
  <div className="cards" style={{marginTop:16}}><div className="card"><span>Bruto total</span><strong>{money(totalGross)}</strong><small>{rows.length} venda(s) filtrada(s)</small></div><div className="card"><span>Taxas/Descontos</span><strong>{money(totalFeesDiscounts)}</strong><small>Taxas, descontos e cancelamentos</small></div><div className="card"><span>Líquido total</span><strong>{money(totalNet)}</strong><small>Após taxas e descontos</small></div></div>
  {rows.length>0&&<div className="filters" style={{marginTop:12,alignItems:"center"}}><label style={{display:"flex",alignItems:"center",gap:8}}><input type="checkbox" checked={allSelected} onChange={toggleAll}/>Selecionar todas as {rows.length} venda(s) filtrada(s)</label><span>{selected.size} selecionada(s)</span><button className="danger small" disabled={!selected.size} onClick={removeSelectedSales}>Excluir selecionadas</button><small>Inclui vendas diretas e importadas; vendas conciliadas exigem desfazer o repasse primeiro.</small></div>}
- <div className="table-wrap"><table><thead><tr><th>Selecionar</th><th>Data</th><th>Cliente</th><th>Canal</th><th>Pagamento</th><th>Bruta</th><th>Taxas/Descontos</th><th>Líquida</th><th>Ações</th></tr></thead><tbody>{rows.map(x=><tr key={x.id}><td><input aria-label="Selecionar venda" type="checkbox" checked={selected.has(x.id)} onChange={()=>toggleOne(x.id)}/></td><td>{new Date(x.fact_date).toLocaleDateString("pt-BR")}</td><td>{x.customer_name||"—"}</td><td>{x.channels?.name||"—"}</td><td>{x.payment_method||"—"}</td><td>{money(x.gross_amount)}</td><td>{money(Number(x.discounts||0)+Number(x.fees||0)+Number(x.cancellations||0))}</td><td><b>{money(x.net_amount)}</b></td><td><button className="icon-btn" title={x.source==="manual"?"Editar":"Venda importada — edição bloqueada"} disabled={x.source!=="manual"} onClick={()=>editSale(x)} style={x.source!=="manual"?{opacity:.45,cursor:"not-allowed"}:undefined}>✏️</button><button className="icon-btn" title="Excluir venda e registros vinculados" onClick={()=>removeSale(x)}>🗑️</button></td></tr>)}{!rows.length&&<EmptyRow text="Nenhuma venda encontrada."/>}</tbody></table></div>
- {importOpen&&<ImportarConferencia data={data} kind="sales" onClose={()=>setImportOpen(false)}/>} {open&&<Modal title={editing?"Editar venda direta":"Nova venda direta"} onClose={()=>setOpen(false)}><form className="form-grid" onSubmit={save}>
+ <div className="table-wrap"><table><thead><tr><th>Selecionar</th><th>Data</th><th>Cliente</th><th>Canal</th><th>Pagamento</th><th>Bruta</th><th>Taxas/Descontos</th><th>Líquida</th><th>Ações</th></tr></thead><tbody>{rows.map(x=><tr key={x.id}><td><input aria-label="Selecionar venda" type="checkbox" checked={selected.has(x.id)} onChange={()=>toggleOne(x.id)}/></td><td>{new Date(x.fact_date).toLocaleDateString("pt-BR")}</td><td>{x.customer_name||"—"}</td><td>{x.channels?.name||"—"}</td><td>{x.payment_method||"—"}</td><td>{money(x.gross_amount)}</td><td>{money(Number(x.discounts||0)+Number(x.fees||0)+Number(x.cancellations||0))}</td><td><b>{money(x.net_amount)}</b></td><td><button className="icon-btn" title="Editar venda" onClick={()=>editSale(x)}>✏️</button><button className="icon-btn" title="Excluir venda e registros vinculados" onClick={()=>removeSale(x)}>🗑️</button></td></tr>)}{!rows.length&&<EmptyRow text="Nenhuma venda encontrada."/>}</tbody></table></div>
+ {importOpen&&<ImportarConferencia data={data} kind="sales" onClose={()=>setImportOpen(false)}/>}
+ {importedEditing&&importedForm&&<Modal title="Editar venda importada" onClose={()=>{if(!savingImported){setImportedEditing(null);setImportedForm(null)}}}><form className="form-grid" onSubmit={saveImportedSale}>
+ <Field label="Data da venda"><input type="date" value={importedForm.fact_date} onChange={e=>setImportedForm({...importedForm,fact_date:e.target.value})} required/></Field>
+ <Field label="Cliente / descrição"><input value={importedForm.customer_name} onChange={e=>setImportedForm({...importedForm,customer_name:e.target.value})} placeholder="Nome do cliente ou descrição"/></Field>
+ <Field label="Telefone"><input value={importedForm.customer_phone} onChange={e=>setImportedForm({...importedForm,customer_phone:e.target.value})} placeholder="Telefone"/></Field>
+ <Field label="Endereço"><input value={importedForm.customer_address} onChange={e=>setImportedForm({...importedForm,customer_address:e.target.value})} placeholder="Endereço"/></Field>
+ <Field label="Canal"><select value={importedForm.channel_id} onChange={e=>setImportedForm({...importedForm,channel_id:e.target.value})}><option value="">Sem canal</option>{data.channels.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>
+ <Field label="Forma de pagamento"><input value={importedForm.payment_method} onChange={e=>setImportedForm({...importedForm,payment_method:e.target.value})} placeholder="Ex.: PIX, cartão"/></Field>
+ <Field label="Valor bruto (R$)"><input type="number" min="0" step="0.01" value={importedForm.gross_amount} onChange={e=>setImportedForm({...importedForm,gross_amount:e.target.value})} required/></Field>
+ <Field label="Taxa de entrega (R$)"><input type="number" min="0" step="0.01" value={importedForm.delivery_fee} onChange={e=>setImportedForm({...importedForm,delivery_fee:e.target.value})}/></Field>
+ <Field label="Descontos (R$)"><input type="number" min="0" step="0.01" value={importedForm.discounts} onChange={e=>setImportedForm({...importedForm,discounts:e.target.value})}/></Field>
+ <Field label="Taxas (R$)"><input type="number" min="0" step="0.01" value={importedForm.fees} onChange={e=>setImportedForm({...importedForm,fees:e.target.value})}/></Field>
+ <Field label="Cancelamentos (R$)"><input type="number" min="0" step="0.01" value={importedForm.cancellations} onChange={e=>setImportedForm({...importedForm,cancellations:e.target.value})}/></Field>
+ <div className="panel" style={{gridColumn:"1/-1"}}><b>Valor líquido calculado: {money(Number(importedForm.gross_amount||0)+Number(importedForm.delivery_fee||0)-Number(importedForm.discounts||0)-Number(importedForm.fees||0)-Number(importedForm.cancellations||0))}</b><p style={{marginBottom:0,fontSize:13,color:"var(--muted)"}}>A edição mantém a origem e o identificador da importação. Os recebíveis vinculados também serão atualizados.</p></div>
+ <div className="form-actions"><button type="button" className="ghost" disabled={savingImported} onClick={()=>{setImportedEditing(null);setImportedForm(null)}}>Cancelar</button><button className="primary" disabled={savingImported}>{savingImported?"Salvando...":"Salvar alterações"}</button></div>
+ </form></Modal>}
+ {open&&<Modal title={editing?"Editar venda direta":"Nova venda direta"} onClose={()=>setOpen(false)}><form className="form-grid" onSubmit={save}>
  <Field label="Cliente"><input value={form.customer_name} onChange={e=>setForm({...form,customer_name:e.target.value})} placeholder="Nome do cliente"/></Field><Field label="Telefone"><input value={form.customer_phone} onChange={e=>setForm({...form,customer_phone:e.target.value})} placeholder="Telefone"/></Field><Field label="Endereço"><input value={form.customer_address} onChange={e=>setForm({...form,customer_address:e.target.value})} placeholder="Para entrega"/></Field><Field label="Data"><input type="date" value={form.fact_date} onChange={e=>setForm({...form,fact_date:e.target.value})} required/></Field>
  <div className="panel" style={{gridColumn:"1/-1"}}><div className="section-title"><h3>Itens da venda</h3><div><button type="button" className="ghost small" onClick={addPizza}>➕ Adicionar pizza</button><button type="button" className="ghost small" onClick={addProduct}>➕ Adicionar outro produto</button></div></div>
  {form.lines.map((line,i)=><div className="panel" key={i} style={{marginBottom:12,border:"1px solid #eee"}}>
