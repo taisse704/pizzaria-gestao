@@ -230,7 +230,7 @@ function Vendas({data}){
  function editSale(x){
    if(x.source!=="manual"){
      setImportedEditing(x);
-     setImportedForm({fact_date:String(x.fact_date||"").slice(0,10)||today(),customer_name:x.customer_name||"",customer_phone:x.customer_phone||"",customer_address:x.customer_address||"",channel_id:x.channel_id||"",payment_method:x.payment_method||"",gross_amount:String(x.gross_amount??0),delivery_fee:String(x.delivery_fee??0),discounts:String(x.discounts??0),fees:String(x.fees??0),cancellations:String(x.cancellations??0)});
+     setImportedForm({fact_date:String(x.fact_date||"").slice(0,10)||today(),customer_name:x.customer_name||"",customer_phone:x.customer_phone||"",customer_address:x.customer_address||"",channel_id:x.channel_id||"",payment_method:x.payment_method||"",gross_amount:String(x.gross_amount??0),delivery_fee:String(x.delivery_fee??0),discounts:String(x.discounts??0),fees:String(x.fees??0),cancellations:String(x.cancellations??0),net_amount:String(x.net_amount??0)});
      return;
    }
    const items=x.sale_items||[];
@@ -275,7 +275,8 @@ function Vendas({data}){
   if([gross,delivery,discounts,fees,cancellations].some(v=>!Number.isFinite(v)||v<0))return alert("Confira os valores: use números iguais ou maiores que zero.");
   const factDate=importedForm.fact_date;
   if(!factDate)return alert("Informe a data da venda.");
-  const net=gross+delivery-discounts-fees-cancellations;
+  const net=Number(importedForm.net_amount||0);
+  if(!Number.isFinite(net)||net<0)return alert("Confira o valor líquido informado.");
   setSavingImported(true);
   try{
     const {data:links,error:linkError}=await supabase.from("reconciliation_batch_items").select("batch_id").eq("sale_id",importedEditing.id).limit(1);
@@ -317,7 +318,8 @@ function Vendas({data}){
  <Field label="Descontos (R$)"><input type="number" min="0" step="0.01" value={importedForm.discounts} onChange={e=>setImportedForm({...importedForm,discounts:e.target.value})}/></Field>
  <Field label="Taxas (R$)"><input type="number" min="0" step="0.01" value={importedForm.fees} onChange={e=>setImportedForm({...importedForm,fees:e.target.value})}/></Field>
  <Field label="Cancelamentos (R$)"><input type="number" min="0" step="0.01" value={importedForm.cancellations} onChange={e=>setImportedForm({...importedForm,cancellations:e.target.value})}/></Field>
- <div className="panel" style={{gridColumn:"1/-1"}}><b>Valor líquido calculado: {money(Number(importedForm.gross_amount||0)+Number(importedForm.delivery_fee||0)-Number(importedForm.discounts||0)-Number(importedForm.fees||0)-Number(importedForm.cancellations||0))}</b><p style={{marginBottom:0,fontSize:13,color:"var(--muted)"}}>A edição mantém a origem e o identificador da importação. Os recebíveis vinculados também serão atualizados.</p></div>
+ <Field label="Valor líquido (R$)"><input type="number" min="0" step="0.01" value={importedForm.net_amount} onChange={e=>setImportedForm({...importedForm,net_amount:e.target.value})} required/></Field>
+ <div className="panel" style={{gridColumn:"1/-1"}}><p style={{marginBottom:0,fontSize:13,color:"var(--muted)"}}>A edição mantém a origem e o identificador da importação. Os recebíveis vinculados também serão atualizados.</p></div>
  <div className="form-actions"><button type="button" className="ghost" disabled={savingImported} onClick={()=>{setImportedEditing(null);setImportedForm(null)}}>Cancelar</button><button className="primary" disabled={savingImported}>{savingImported?"Salvando...":"Salvar alterações"}</button></div>
  </form></Modal>}
  {open&&<Modal title={editing?"Editar venda direta":"Nova venda direta"} onClose={()=>setOpen(false)}><form className="form-grid" onSubmit={save}>
