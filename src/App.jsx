@@ -1145,7 +1145,7 @@ function Dados({data}){
           <input type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" onChange={onFile}/>
         </Field>
       </div>
-      {sheetSource && <p className="success">Formato identificado: {sheetSource==="ifood"?"iFood":sheetSource==="beefood"?"BeeFood":sheetSource==="99food"?"99Food — vendas":sheetSource==="whatsapp"?"WhatsApp — vendas":sheetSource==="cartao"?"Cartão":sheetSource==="bank_ton"?"Banco TON":"Banco IF Pago}.</p>}
+      {sheetSource && <p className="success">Formato identificado: {sheetSource==="ifood"?"iFood":sheetSource==="beefood"?"BeeFood":sheetSource==="99food"?"99Food — vendas":sheetSource==="whatsapp"?"WhatsApp — vendas":sheetSource==="cartao"?"Cartão":sheetSource==="bank_ton"?"Banco TON":"Banco IF Pago" }.</p>}
       {preview.length>0 && (
         <>
           <div className="table-wrap" style={{marginTop:16}}>
