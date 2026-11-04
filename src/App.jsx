@@ -22,7 +22,7 @@ class ModuleErrorBoundary extends Component {
 
 const APP_MODE=import.meta.env.VITE_APP_MODE==="financeiro"?"financeiro":"vendas";
 const vendasModules=[
-  ["dashboard","Dashboard",LayoutDashboard],["vendas","Vendas",ShoppingBag],["cardapio","Cardápio",Utensils],["dados","Dados / Importações / Backup",Database],["controle-ifood","Controle iFood",ClipboardCheck],["configuracoes","Configurações",Settings]
+  ["dashboard","Dashboard",LayoutDashboard],["vendas","Vendas",ShoppingBag],["cardapio","Cardápio",Utensils],["dados","Dados / Importações / Backup",Database],["controle-ifood","Controle de Vendas via Plataformas",ClipboardCheck],["configuracoes","Configurações",Settings]
 ];
 const financeiroModules=[
   ["dashboard","Dashboard",LayoutDashboard],["bancos","Bancos / Extratos",Landmark],["cartoes","Cartões",CreditCard],["gastos-cartao","Gastos no cartão",CreditCard],["caixa","Caixa / Fluxo de caixa",Landmark],["contas","Contas a pagar",Receipt],["despesas","Despesas",Receipt],["dados","Importações / Backup",Database],["relatorios","Relatórios financeiros",BarChart3],["configuracoes","Configurações",Settings]
@@ -592,43 +592,44 @@ function Caixa({data}){
 
 function ControleIFood({data}){
  const currentMonth=()=>{const d=new Date();return String(d.getFullYear())+"-"+String(d.getMonth()+1).padStart(2,"0")};
- const [month,setMonth]=useState(currentMonth),[gross,setGross]=useState(""),[net,setNet]=useState(""),[entries,setEntries]=useState([]),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[message,setMessage]=useState(""),[editing,setEditing]=useState(null);
- const orderedEntries=[...entries].sort((a,b)=>String(a.month).slice(0,10).localeCompare(String(b.month).slice(0,10)));
+ const [month,setMonth]=useState(currentMonth),[platform,setPlatform]=useState("iFood"),[gross,setGross]=useState(""),[net,setNet]=useState(""),[entries,setEntries]=useState([]),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[message,setMessage]=useState(""),[editing,setEditing]=useState(null);
+ const orderedEntries=[...entries].sort((a,b)=>String(a.month).slice(0,10).localeCompare(String(b.month).slice(0,10))||String(a.platform).localeCompare(String(b.platform)));
  const totalGross=orderedEntries.reduce((sum,row)=>sum+Number(row.gross_amount||0),0);
  const totalNet=orderedEntries.reduce((sum,row)=>sum+Number(row.net_amount||0),0);
  async function load(){
   if(!data.user?.id)return;
   setLoading(true);
-  const {data:rows,error}=await supabase.from("ifood_monthly_control").select("*").eq("user_id",data.user.id).order("month",{ascending:true});
+  const {data:rows,error}=await supabase.from("ifood_monthly_control").select("*").eq("user_id",data.user.id).order("month",{ascending:true}).order("platform",{ascending:true});
   if(error){setMessage("Não foi possível carregar os controles: "+error.message);setEntries([])}
   else{setEntries(rows||[]);setMessage("")}
   setLoading(false);
  }
  useEffect(()=>{load()},[data.user?.id]);
- function resetForm(){setMonth(currentMonth());setGross("");setNet("");setEditing(null)}
+ function resetForm(){setMonth(currentMonth());setPlatform("iFood");setGross("");setNet("");setEditing(null)}
  async function save(e){
   e.preventDefault();setMessage("");
-  if(!month||gross===""||net===""){setMessage("Preencha o mês, o valor bruto e o valor líquido.");return}
+  if(!month||!platform||gross===""||net===""){setMessage("Preencha a plataforma, o mês, o valor bruto e o valor líquido.");return}
   const bruto=Number(gross),liquido=Number(net);
   if(!Number.isFinite(bruto)||!Number.isFinite(liquido)||bruto<0||liquido<0){setMessage("Informe valores válidos, iguais ou maiores que zero.");return}
   setSaving(true);
-  const {error}=await supabase.from("ifood_monthly_control").upsert({user_id:data.user.id,month:month+"-01",gross_amount:bruto,net_amount:liquido},{onConflict:"user_id,month"});
+  const {error}=await supabase.from("ifood_monthly_control").upsert({user_id:data.user.id,month:month+"-01",platform,gross_amount:bruto,net_amount:liquido},{onConflict:"user_id,month,platform"});
   if(error)setMessage("Não foi possível salvar: "+error.message);
-  else{await load();resetForm();setMessage("Controle iFood salvo com sucesso.")}
+  else{await load();resetForm();setMessage("Controle de "+platform+" salvo com sucesso.")}
   setSaving(false);
  }
- function edit(row){setEditing(row.id);setMonth(String(row.month).slice(0,7));setGross(String(row.gross_amount??0));setNet(String(row.net_amount??0));setMessage("")}
+ function edit(row){setEditing(row.id);setMonth(String(row.month).slice(0,7));setPlatform(row.platform||"iFood");setGross(String(row.gross_amount??0));setNet(String(row.net_amount??0));setMessage("")}
  async function remove(row){
-  if(!window.confirm("Excluir o controle do iFood de "+new Date(String(row.month).slice(0,10)+"T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"})+"?"))return;
+  if(!window.confirm("Excluir o controle de "+(row.platform||"iFood")+" de "+new Date(String(row.month).slice(0,10)+"T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"})+"?"))return;
   const {error}=await supabase.from("ifood_monthly_control").delete().eq("id",row.id).eq("user_id",data.user.id);
   if(error)setMessage("Não foi possível excluir: "+error.message);else{if(editing===row.id)resetForm();await load();setMessage("Registro excluído.")}
  }
  return <main className="content">
-  <div className="page-head"><div><h2>Controle iFood</h2><p>Registre o fechamento mensal do iFood com os valores bruto e líquido.</p></div></div>
+  <div className="page-head"><div><h2>Controle de Vendas via Plataformas</h2><p>Registre o fechamento mensal de cada plataforma, separadamente.</p></div></div>
   <section className="panel">
-   <div className="section-title"><h3>{editing?"Editar controle mensal":"Adicionar mês"}</h3></div>
+   <div className="section-title"><h3>{editing?"Editar controle mensal":"Adicionar fechamento mensal"}</h3></div>
    <form onSubmit={save}>
     <div className="form-grid">
+     <Field label="Plataforma"><select value={platform} onChange={e=>setPlatform(e.target.value)} required><option value="99Food">99Food</option><option value="iFood">iFood</option><option value="BeeFood">BeeFood</option></select></Field>
      <Field label="Mês"><input type="month" value={month} onChange={e=>setMonth(e.target.value)} required/></Field>
      <Field label="Valor bruto (R$)"><input type="number" min="0" step="0.01" inputMode="decimal" placeholder="0,00" value={gross} onChange={e=>setGross(e.target.value)} required/></Field>
      <Field label="Valor líquido (R$)"><input type="number" min="0" step="0.01" inputMode="decimal" placeholder="0,00" value={net} onChange={e=>setNet(e.target.value)} required/></Field>
@@ -638,12 +639,11 @@ function ControleIFood({data}){
    </form>
   </section>
   <section className="panel">
-   <div className="section-title"><h3>Histórico mensal</h3><span className="muted">{entries.length} mês(es)</span></div>
-   {loading?<p className="muted">Carregando registros...</p>:entries.length===0?<div className="empty">Nenhum controle registrado ainda.</div>:<div className="table-wrap"><table><thead><tr><th>Mês</th><th>Valor bruto</th><th>Valor líquido</th><th>Ações</th></tr></thead><tbody>{orderedEntries.map(row=><tr key={row.id}><td>{new Date(String(row.month).slice(0,10)+"T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"})}</td><td>{money(row.gross_amount)}</td><td>{money(row.net_amount)}</td><td><div className="row-actions"><button className="ghost small" onClick={()=>edit(row)}>Editar</button><button className="danger small" onClick={()=>remove(row)}>Excluir</button></div></td></tr>)}<tr className="total-row"><th>Total geral</th><th>{money(totalGross)}</th><th>{money(totalNet)}</th><th>—</th></tr></tbody></table></div>}
+   <div className="section-title"><h3>Histórico mensal</h3><span className="muted">{entries.length} registro(s)</span></div>
+   {loading?<p className="muted">Carregando registros...</p>:entries.length===0?<div className="empty">Nenhum controle registrado ainda.</div>:<div className="table-wrap"><table><thead><tr><th>Plataforma</th><th>Mês</th><th>Valor bruto</th><th>Valor líquido</th><th>Ações</th></tr></thead><tbody>{orderedEntries.map(row=><tr key={row.id}><td><b>{row.platform||"iFood"}</b></td><td>{new Date(String(row.month).slice(0,10)+"T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"})}</td><td>{money(row.gross_amount)}</td><td>{money(row.net_amount)}</td><td><div className="row-actions"><button className="ghost small" onClick={()=>edit(row)}>Editar</button><button className="danger small" onClick={()=>remove(row)}>Excluir</button></div></td></tr>)}<tr className="total-row"><th colSpan="2">Total geral</th><th>{money(totalGross)}</th><th>{money(totalNet)}</th><th>—</th></tr></tbody></table></div>}
   </section>
  </main>
 }
-
 function Relatorios({data}){
  const now=new Date();
  const currentMonth=String(now.getFullYear())+"-"+String(now.getMonth()+1).padStart(2,"0");
