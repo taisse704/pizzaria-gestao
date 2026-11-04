@@ -32,8 +32,8 @@ jobs:
         run: npm run build -- --outDir dist-financeiro --base=/pizzaria-gestao/financeiro/
         env:
           VITE_APP_MODE: financeiro
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_FINANCEIRO_SUPABASE_URL: https://mstohdtaeyqbiwwahuti.supabase.co
+          VITE_FINANCEIRO_SUPABASE_PUBLISHABLE_KEY: sb_publishable_-WLMX4jL5OXMs9lPW9jmBA_xFMYGFaL
       - name: Montar publicação sem substituir Vendas
         run: |
           mkdir -p dist
