@@ -1075,6 +1075,9 @@ function useData(user){
    if(failed.length)console.warn("Consultas com erro:",failed.map(([name,r])=>({name,error:r.error?.message||String(r.error)})));
    const get=name=>results.find(([n])=>n===name)?.[1]?.data||[];
    setState({banks:get("bancos"),categories:get("categorias"),channels:get("canais"),suppliers:get("fornecedores"),cards:get("cartões"),sales:get("vendas"),bankTx:get("movimentos bancários"),payables:get("contas a pagar"),receivables:get("recebimentos"),manualExpenses:get("despesas manuais"),cashMovements:get("movimentos de caixa"),products:get("produtos"),purchases:get("compras"),loading:false,error:failed.length?"Alguns dados não puderam ser carregados ("+failed.length+" consulta(s)).":""});
+   supabase.functions.invoke("sync-finance-sales",{body:{sync_all:true}})
+    .then(({data:syncResult,error:syncError})=>{if(syncError)console.warn("Sincronização financeira pendente:",syncError.message);else if(syncResult?.error)console.warn("Sincronização financeira pendente:",syncResult.error);else console.info("Espelho financeiro sincronizado:",syncResult?.upserted||0,"venda(s).")})
+    .catch(error=>console.warn("Não foi possível sincronizar as vendas com o Financeiro:",error?.message||error));
   }catch(error){console.error("Erro ao carregar dados:",error);setState(s=>({...s,loading:false,error:error?.message||"Erro ao carregar seus dados."}))}
  }
  useEffect(()=>{reload()},[user?.id]);
