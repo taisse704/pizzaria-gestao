@@ -20,16 +20,29 @@ class ModuleErrorBoundary extends Component {
   }
 }
 
-const modules=[
-  ["dashboard","Dashboard",LayoutDashboard],["vendas","Vendas",ShoppingBag],["recebimentos","Recebimentos",Receipt],["bancos","Bancos / Extratos",Landmark],
-  ["cartoes","Cartões",CreditCard],["gastos-cartao","Gastos no cartão",CreditCard],["caixa","Caixa / Fluxo de caixa",Landmark],["contas","Contas a pagar",Receipt],["compras","Compras / Matéria-prima",ShoppingBag],["despesas","Despesas",Receipt],["cardapio","Cardápio",Utensils],["dados","Dados / Importações / Backup",Database],["relatorios","Relatórios",BarChart3],["controle-ifood","Controle iFood",ClipboardCheck],["configuracoes","Configurações",Settings]
+const APP_MODE=import.meta.env.VITE_APP_MODE==="financeiro"?"financeiro":"vendas";
+const vendasModules=[
+  ["dashboard","Dashboard",LayoutDashboard],["vendas","Vendas",ShoppingBag],["cardapio","Cardápio",Utensils],["dados","Dados / Importações / Backup",Database],["controle-ifood","Controle iFood",ClipboardCheck],["configuracoes","Configurações",Settings]
 ];
+const financeiroModules=[
+  ["dashboard","Dashboard",LayoutDashboard],["bancos","Bancos / Extratos",Landmark],["cartoes","Cartões",CreditCard],["gastos-cartao","Gastos no cartão",CreditCard],["caixa","Caixa / Fluxo de caixa",Landmark],["contas","Contas a pagar",Receipt],["despesas","Despesas",Receipt],["dados","Importações / Backup",Database],["relatorios","Relatórios financeiros",BarChart3],["configuracoes","Configurações",Settings]
+];
+const modules=APP_MODE==="financeiro"?financeiroModules:vendasModules;
 const money=v=>new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(Number(v||0));
 const dateBR=v=>v?new Date(v+"T00:00:00").toLocaleDateString("pt-BR"):"—";
 const today=()=>new Date().toISOString().slice(0,10);
 const monthStart=()=>new Date(new Date().getFullYear(),new Date().getMonth(),1).toISOString().slice(0,10);
 
 async function seedUser(user){
+  if(APP_MODE==="financeiro"){
+    const [{data:banks},{data:existingCats}]=await Promise.all([
+      supabase.from("bank_accounts").select("id").eq("user_id",user.id).limit(1),
+      supabase.from("categories").select("id").eq("user_id",user.id).limit(1)
+    ]);
+    if(!banks?.length)await supabase.from("bank_accounts").insert([{name:"TON",institution:"TON",account_type:"bank",user_id:user.id},{name:"iFood Pago",institution:"iFood",account_type:"bank",user_id:user.id}]);
+    if(!existingCats?.length)await supabase.from("categories").insert([["Matéria-prima","Despesas"],["Fornecedor","Despesas"],["Aluguel","Despesas"],["Energia","Despesas"],["Água","Despesas"],["Internet","Despesas"],["Funcionários","Despesas"],["Impostos","Despesas"],["Taxas","Despesas"],["Manutenção","Despesas"],["Outras despesas","Despesas"],["Transferência entre contas","Outros"],["Aporte","Outros"],["Retirada","Outros"],["Ajuste","Outros"],["Empréstimo","Outros"]].map(([name,classification])=>({user_id:user.id,name,classification})));
+    return;
+  }
   const defaults=[
     {name:"TON",institution:"TON",account_type:"bank"},
     {name:"iFood Pago",institution:"iFood",account_type:"bank"}
@@ -1015,6 +1028,29 @@ function useData(user){
   if(!user?.id||!supabase){setState(s=>({...s,loading:false,error:"Não foi possível acessar o Supabase."}));return}
   setState(s=>({...s,loading:true,error:""}));
   const uid=user.id;
+  if(APP_MODE==="financeiro"){
+   const financeQueries=[
+    ["bancos",()=>supabase.from("bank_accounts").select("*").eq("user_id",uid).eq("active",true).order("name")],
+    ["categorias",()=>supabase.from("categories").select("*").eq("user_id",uid).eq("active",true).order("classification").order("name")],
+    ["fornecedores",()=>supabase.from("suppliers").select("*").eq("user_id",uid).eq("active",true).order("name")],
+    ["cartões",()=>supabase.from("card_accounts").select("*").eq("user_id",uid).eq("active",true).order("name")],
+    ["vendas_financeiras",()=>supabase.from("sales_financial_entries").select("*").eq("user_id",uid).order("fact_date",{ascending:false}).limit(5000)],
+    ["movimentos bancários",()=>supabase.from("bank_transactions").select("*,bank_accounts(name),categories(name)").eq("user_id",uid).order("fact_date",{ascending:false}).limit(5000)],
+    ["contas a pagar",()=>supabase.from("payables").select("*,suppliers(name),categories(name)").eq("user_id",uid).order("due_date",{ascending:true}).limit(5000)],
+    ["despesas manuais",()=>supabase.from("manual_expenses").select("*,categories(name)").eq("user_id",uid).order("fact_date",{ascending:false}).limit(5000)],
+    ["movimentos de caixa",()=>supabase.from("cash_movements").select("*").eq("user_id",uid).order("fact_date",{ascending:false}).limit(5000)]
+   ];
+   try{
+    const results=await Promise.all(financeQueries.map(async([name,fn])=>{try{return [name,await fn()]}catch(error){return [name,{data:[],error}]} }));
+    const failed=results.filter(([,r])=>r?.error);
+    if(failed.length)console.warn("Consultas financeiras com erro:",failed.map(([name,r])=>({name,error:r.error?.message||String(r.error)})));
+    const get=name=>results.find(([n])=>n===name)?.[1]?.data||[];
+    const financialSales=get("vendas_financeiras").map(x=>({...x,id:x.source_sale_id||x.id,channel_id:x.channel||null,channels:x.channel?{name:x.channel}:null}));
+    const channelNames=[...new Set(financialSales.map(x=>x.channel).filter(Boolean))];
+    setState({banks:get("bancos"),categories:get("categorias"),channels:channelNames.map(name=>({id:name,name})),suppliers:get("fornecedores"),cards:get("cartões"),sales:financialSales,bankTx:get("movimentos bancários"),payables:get("contas a pagar"),receivables:[],manualExpenses:get("despesas manuais"),cashMovements:get("movimentos de caixa"),products:[],purchases:[],loading:false,error:failed.length?"Alguns dados financeiros não puderam ser carregados ("+failed.length+" consulta(s)).":""});
+   }catch(error){console.error("Erro ao carregar dados financeiros:",error);setState(s=>({...s,loading:false,error:error?.message||"Erro ao carregar dados financeiros."}))}
+   return;
+  }
   const queries=[
    ["bancos",()=>supabase.from("bank_accounts").select("*").eq("user_id",uid).eq("active",true).order("name")],
    ["categorias",()=>supabase.from("categories").select("*").eq("user_id",uid).eq("active",true).order("classification").order("name")],
