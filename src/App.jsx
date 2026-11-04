@@ -882,7 +882,7 @@ function detectSource(headers){const h=headers.map(normalizeHeader).join(" ");if
 function parseCSVText(text,delimiter){const rows=[];let row=[],field="",quoted=false;for(let i=0;i<text.length;i++){const ch=text[i];if(quoted){if(ch==='"'&&text[i+1]==='"'){field+='"';i++}else if(ch==='"')quoted=false;else field+=ch}else if(ch==='"'){quoted=true}else if(ch===delimiter){row.push(field);field=""}else if(ch==="\n"||ch==="\r"){if(ch==="\r"&&text[i+1]==="\n")i++;row.push(field);if(row.some(v=>String(v??"").trim()!==""))rows.push(row);row=[];field=""}else field+=ch}row.push(field);if(row.some(v=>String(v??"").trim()!==""))rows.push(row);return rows}
 async function parseWorkbook(file){const buf=await file.arrayBuffer();const bytes=new Uint8Array(buf);const isZipWorkbook=bytes.length>=4&&bytes[0]===0x50&&bytes[1]===0x4b&&bytes[2]===0x03&&bytes[3]===0x04;const isExcel=/\.(xlsx|xls)$/i.test(file.name)||file.type==="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"||file.type==="application/vnd.ms-excel";if(isZipWorkbook||isExcel){const XLSX=await import("xlsx");const wb=XLSX.read(buf,{type:"array",cellDates:true,cellNF:true,cellText:true,raw:false});const ws=wb.Sheets[wb.SheetNames[0]];if(!ws)throw new Error("A planilha não contém uma aba com dados.");const sheetRows=XLSX.utils.sheet_to_json(ws,{header:1,defval:""});if(sheetRows.length&&sheetRows.every(row=>Array.isArray(row)&&row.length===1)){const embeddedText=sheetRows.map(row=>String(row[0]??"")).filter(v=>v.trim()!=="").join("\n");const firstCell=String(sheetRows[0]?.[0]??"").toLowerCase();if((firstCell.includes("data da transação")||firstCell.includes("data da transacao"))&&firstCell.includes("descrição")&&firstCell.includes("valor")){const embeddedRows=parseCSVText(embeddedText,",");if(embeddedRows.length&&embeddedRows[0].length>=3)return embeddedRows}}return sheetRows}const text=new TextDecoder("utf-8").decode(buf).replace(/^\uFEFF/,"");const first=text.split(/\r?\n/,1)[0]||"";let commas=0,semicolons=0,quoted=false;for(let i=0;i<first.length;i++){const ch=first[i];if(ch==='"'&&first[i+1]==='"'){i++;continue}if(ch==='"')quoted=!quoted;else if(!quoted&&ch===",")commas++;else if(!quoted&&ch===";")semicolons++}const commaRows=parseCSVText(text,",");const semicolonRows=parseCSVText(text,";");const scoreRows=(candidate)=>{if(!candidate.length)return -1;const widths=candidate.map(row=>row.length);const multi=widths.filter(width=>width>1).length;const maxWidth=Math.max(...widths);const consistent=widths.filter(width=>width===maxWidth).length;return multi*100+maxWidth*10+consistent};let rows=scoreRows(semicolonRows)>scoreRows(commaRows)?semicolonRows:commaRows;if(rows.length&&rows.every(row=>row.length===1)){const cells=rows.map(row=>String(row[0]??"").trim()).filter(Boolean);const hasEmbeddedCsv=cells.some(cell=>cell.includes(",")&&/[,;]\\s*["']?[^,;]+[,;]/.test(cell));if(hasEmbeddedCsv){const embeddedText=cells.join("\n");const embeddedComma=parseCSVText(embeddedText,",");const embeddedSemicolon=parseCSVText(embeddedText,";");const embedded=scoreRows(embeddedSemicolon)>scoreRows(embeddedComma)?embeddedSemicolon:embeddedComma;if(embedded.some(row=>row.length>1))rows=embedded;}}if(!rows.length)throw new Error("O arquivo CSV está vazio ou não pôde ser lido.");return rows}
 function Dados({data}){
- const [source,setSource]=useState("ifood"),[preview,setPreview]=useState([]),[file,setFile]=useState(null),[busy,setBusy]=useState(false),[message,setMessage]=useState(""),[sheetSource,setSheetSource]=useState("");
+ const [source,setSource]=useState(APP_MODE==="financeiro"?"bank_ifood":"ifood"),[preview,setPreview]=useState([]),[file,setFile]=useState(null),[busy,setBusy]=useState(false),[message,setMessage]=useState(""),[sheetSource,setSheetSource]=useState("");
  async function onFile(e){const f=e.target.files?.[0];if(!f)return;setFile(f);setMessage("");try{const rows=await parseWorkbook(f);const clean=rows.filter(r=>Array.isArray(r)&&r.some(v=>String(v??"").trim()!==""));setPreview(clean);const detected=detectSource(clean[0]||[]);setSheetSource(detected);if(source==="auto"||source==="ifood")setSource(detected)}catch(error){setPreview([]);setMessage("Não foi possível ler o Excel/CSV: "+(error?.message||"arquivo inválido."))}}
  function rowsForImport(){return preview.length>1?preview.slice(1).filter(r=>r.some(v=>String(v??"").trim()!=="")):[]}
  async function ensureImport(sourceName,fileName,count){const bytes=await file.arrayBuffer();const hashBuf=await crypto.subtle.digest("SHA-256",bytes);const hash=Array.from(new Uint8Array(hashBuf)).map(b=>b.toString(16).padStart(2,"0")).join("");const {data:existing,error:lookupError}=await supabase.from("imports").select("id,row_count,status").eq("user_id",data.user.id).eq("source",sourceName).eq("file_hash",hash).limit(1);if(lookupError)throw lookupError;if(existing?.length){const previous=existing[0];if(previous.status==="processing")return {duplicate:true};const canRetrySafely=["iFood","BeeFood","99Food","Banco TON","Banco IF Pago"].includes(sourceName);if(Number(previous.row_count||0)>0&&!canRetrySafely)return {duplicate:true};const {error}=await supabase.from("imports").update({file_name:fileName,row_count:count,status:"processing"}).eq("id",previous.id).eq("user_id",data.user.id);if(error)throw error;return {duplicate:false,id:previous.id}}const {data:imp,error}=await supabase.from("imports").insert({user_id:data.user.id,source:sourceName,file_name:fileName,row_count:count,status:"processing",file_hash:hash}).select("id").single();if(error)throw error;return {duplicate:false,id:imp.id}}
@@ -975,21 +975,24 @@ function Dados({data}){
     <div className="page-head">
       <div>
         <h2>Dados / Importações / Backup</h2>
-        <p>Importe Excel/CSV do iFood, BeeFood, 99Food, WhatsApp, iFood Pago, TON e cartão de crédito sem duplicar lançamentos.</p>
+        <p>{APP_MODE==="financeiro"?"Importe extratos bancários e faturas de cartão sem duplicar lançamentos.":"Importe vendas do iFood, BeeFood, 99Food e WhatsApp sem duplicar pedidos."}</p>
       </div>
-      <button className="ghost" onClick={()=>downloadCSV(data.bankTx,"backup-extrato.csv")}><Download size={16}/>Backup CSV</button>
+      <button className="ghost" onClick={()=>downloadCSV(APP_MODE==="financeiro"?data.bankTx:data.sales,APP_MODE==="financeiro"?"backup-extrato.csv":"backup-vendas.csv")}><Download size={16}/>Backup CSV</button>
     </div>
     <section className="panel">      <h3>Importar Excel / CSV</h3>
       <div className="form-grid">
         <Field label="Origem">
           <select value={source} onChange={e=>setSource(e.target.value)}>
-            <option value="ifood">iFood — vendas</option>
-            <option value="beefood">BeeFood — vendas</option>
-            <option value="99food">99Food — vendas</option>
-            <option value="whatsapp">WhatsApp — vendas via Excel</option>
-            <option value="bank_ifood">Banco — IF Pago</option>
-            <option value="bank_ton">Banco — TON</option>
-            <option value="cartao">Cartão de crédito — fatura</option>
+            {APP_MODE==="vendas"?<>
+              <option value="ifood">iFood — vendas</option>
+              <option value="beefood">BeeFood — vendas</option>
+              <option value="99food">99Food — vendas</option>
+              <option value="whatsapp">WhatsApp — vendas via Excel</option>
+            </>:<>
+              <option value="bank_ifood">Banco — IF Pago</option>
+              <option value="bank_ton">Banco — TON</option>
+              <option value="cartao">Cartão de crédito — fatura</option>
+            </>}
             <option value="auto">Detectar automaticamente</option>
           </select>
         </Field>
