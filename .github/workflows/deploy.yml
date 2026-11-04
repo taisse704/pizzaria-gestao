@@ -1,4 +1,4 @@
-name: Publicar Pizzaria Gestão - Vendas
+name: Publicar Pizzaria Gestão - Vendas e Financeiro
 on:
   push:
     branches: [main]
@@ -8,7 +8,7 @@ permissions:
   pages: write
   id-token: write
 concurrency:
-  group: pages-vendas
+  group: pages-pizzaria-gestao
   cancel-in-progress: true
 jobs:
   build:
@@ -22,12 +22,24 @@ jobs:
           node-version: 22
       - name: Instalar dependências
         run: npm install
-      - name: Compilar Vendas
-        run: npm run build
+      - name: Compilar Vendas (endereço atual preservado)
+        run: npm run build -- --outDir dist-vendas
         env:
           VITE_APP_MODE: vendas
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      - name: Compilar Financeiro (área separada)
+        run: npm run build -- --outDir dist-financeiro --base=/pizzaria-gestao/financeiro/
+        env:
+          VITE_APP_MODE: financeiro
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      - name: Montar publicação sem substituir Vendas
+        run: |
+          mkdir -p dist
+          cp -a dist-vendas/. dist/
+          mkdir -p dist/financeiro
+          cp -a dist-financeiro/. dist/financeiro/
       - name: Preparar artefato GitHub Pages
         uses: actions/upload-pages-artifact@v3
         with:
